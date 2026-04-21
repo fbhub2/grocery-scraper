@@ -1,5 +1,5 @@
 import httpx
-from .base import Product
+from .base import Product, split_name_variant
 
 _URL = "https://platform-rest-prod.ngdata.no/api/episearch/1300/autosuggest"
 _STORE_ID = "7080001150488"
@@ -27,13 +27,15 @@ def search(query: str, limit: int = 5) -> list[Product]:
     products = []
     for hit in data.get("products", {}).get("hits", [])[:limit]:
         src = hit.get("contentData", {}).get("_source", {})
+        full = f"{src.get('title', '')} {hit.get('description', '')}".strip()
+        name, variant = split_name_variant(full)
         products.append(
             Product(
-                name=src.get("title", hit.get("title", "")),
+                name=name,
                 price=float(src.get("pricePerUnit", 0)),
                 unit_price=f"{src.get('comparePricePerUnit', '')} kr/{src.get('compareUnit', '')}".strip(" kr/") or None,
                 url="https://www.meny.no/varer" + src.get("slugifiedUrl", ""),
-                variant=hit.get("description") or None,
+                variant=variant,
             )
         )
     return products

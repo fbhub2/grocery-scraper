@@ -1,5 +1,5 @@
 import httpx
-from .base import Product
+from .base import Product, split_name_variant
 
 _URL = "https://oda.com/api/v1/search/mixed/"
 _HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
@@ -21,7 +21,7 @@ def search(query: str, limit: int = 5) -> list[Product]:
             price=float(a["gross_price"]),
             unit_price=unit,
             url=a.get("front_url", ""),
-            variant=a.get("name_extra") or None,
+            variant=split_name_variant(a.get("name_extra", ""))[1],
         ))
         if len(products) >= limit:
             break
