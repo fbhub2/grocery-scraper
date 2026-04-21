@@ -27,16 +27,13 @@ def search(query: str, limit: int = 5) -> list[Product]:
     products = []
     for hit in data.get("products", {}).get("hits", [])[:limit]:
         src = hit.get("contentData", {}).get("_source", {})
-        name = src.get("title", hit.get("title", ""))
-        desc = hit.get("description", "")
-        if desc:
-            name = f"{name} {desc}"
         products.append(
             Product(
-                name=name,
+                name=src.get("title", hit.get("title", "")),
                 price=float(src.get("pricePerUnit", 0)),
                 unit_price=f"{src.get('comparePricePerUnit', '')} kr/{src.get('compareUnit', '')}".strip(" kr/") or None,
                 url="https://www.meny.no/varer" + src.get("slugifiedUrl", ""),
+                variant=hit.get("description") or None,
             )
         )
     return products

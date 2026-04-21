@@ -17,10 +17,11 @@ def search(query: str, limit: int = 5) -> list[Product]:
         a = item["attributes"]
         unit = f"{a.get('gross_unit_price', '')} kr/{a.get('unit_price_quantity_abbreviation', '')}".strip(" kr/") or None
         products.append(Product(
-            name=a["full_name"],
+            name=a["name"],
             price=float(a["gross_price"]),
             unit_price=unit,
             url=a.get("front_url", ""),
+            variant=a.get("name_extra") or None,
         ))
         if len(products) >= limit:
             break

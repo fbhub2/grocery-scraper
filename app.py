@@ -157,7 +157,10 @@ if st.session_state.search_results is not None:
                     price_line = f"kr {p['price']:.2f}"
                     if p.get("unit_price"):
                         price_line += f"  _{p['unit_price']}_"
-                    st.markdown(f"**{p['name']}**  \n{price_line}")
+                    st.markdown(f"**{p['name']}**")
+                    if p.get("variant"):
+                        st.caption(p["variant"])
+                    st.markdown(price_line)
                     if p.get("url"):
                         st.markdown(f"[Se produkt]({p['url']})")
                     if p["name"].lower() in liste_set:
@@ -173,6 +176,7 @@ if st.session_state.search_results is not None:
         {
             "Butikk": store,
             "Produkt": p["name"],
+            "Mengde": p.get("variant") or "",
             "Pris (kr)": p["price"],
             "Per enhet": p.get("unit_price") or "",
         }
