@@ -142,14 +142,7 @@ if st.session_state.search_results is not None:
     results = st.session_state.search_results
     errors = st.session_state.search_errors
 
-    already_on_list = q.lower() in [v.lower() for v in st.session_state.handleliste]
-    if already_on_list:
-        st.success(f'"{q}" er allerede på handlelisten.')
-    elif q:
-        if st.button(f'➕ Legg "{q}" til handlelisten'):
-            st.session_state.handleliste.append(q.strip().lower())
-            save_liste(st.session_state.handleliste)
-            st.rerun()
+    liste_set = {v.lower() for v in st.session_state.handleliste}
 
     cols = st.columns(len(STORES))
     for col, store in zip(cols, STORES):
@@ -160,13 +153,20 @@ if st.session_state.search_results is not None:
             elif not results.get(store):
                 st.info("Ingen resultater")
             else:
-                for p in results[store]:
+                for i, p in enumerate(results[store]):
                     price_line = f"kr {p['price']:.2f}"
                     if p.get("unit_price"):
                         price_line += f"  _{p['unit_price']}_"
                     st.markdown(f"**{p['name']}**  \n{price_line}")
                     if p.get("url"):
                         st.markdown(f"[Se produkt]({p['url']})")
+                    if p["name"].lower() in liste_set:
+                        st.caption("✓ På handlelisten")
+                    else:
+                        if st.button("➕ Legg til liste", key=f"legg_{store}_{i}"):
+                            st.session_state.handleliste.append(p["name"])
+                            save_liste(st.session_state.handleliste)
+                            st.rerun()
                     st.divider()
 
     all_rows = [
@@ -201,26 +201,41 @@ elif st.session_state.liste_resultater is not None:
 
     st.subheader("Handlelisteprissammenligning")
 
-    df = pd.DataFrame(rows)
-    total_row = {"Vare": "Total", **{s: totals[s] for s in STORES}}
-    df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+    # Per-item: finn billigste butikk og beregn summer
+    optimal_total = 0.0
+    store_best_sums = {s: 0.0 for s in STORES}
+    rows_display = []
+    for row in rows:
+        prices = {s: row[s] for s in STORES if row.get(s) is not None}
+        if prices:
+            best = min(prices, key=prices.get)
+            store_best_sums[best] += prices[best]
+            optimal_total += prices[best]
+        else:
+            best = "—"
+        rows_display.append({**row, "Billigst": best})
 
     col_config = {s: st.column_config.NumberColumn(s, format="%.2f kr") for s in STORES}
-    st.dataframe(df, column_config=col_config, use_container_width=True, hide_index=True)
+    st.dataframe(
+        pd.DataFrame(rows_display),
+        column_config=col_config,
+        use_container_width=True,
+        hide_index=True,
+    )
 
-    valid_totals = {s: t for s, t in totals.items() if t > 0}
-    if valid_totals:
-        cheapest = min(valid_totals, key=valid_totals.get)
-        others = [s for s in valid_totals if s != cheapest]
-        if others:
-            avg_other = sum(valid_totals[s] for s in others) / len(others)
-            savings = avg_other - valid_totals[cheapest]
-            suffix = f" — spar ca. kr {savings:.2f} vs. {others[0]}" if savings > 0.01 else ""
-        else:
-            suffix = ""
-        st.success(
-            f"**{cheapest}** er billigst for hele listen — "
-            f"totalt **kr {valid_totals[cheapest]:.2f}**{suffix}"
+    # Oppsummering
+    st.subheader("Oppsummering")
+    m_cols = st.columns(1 + len(STORES))
+    m_cols[0].metric("🏆 Optimal sum", f"kr {optimal_total:.2f}",
+                     help="Kjøper billigste alternativ per vare på tvers av butikker")
+    for i, store in enumerate(STORES, 1):
+        delta = totals[store] - optimal_total
+        m_cols[i].metric(
+            f"{store}",
+            f"kr {store_best_sums[store]:.2f}",
+            delta=f"Alt på {store}: kr {totals[store]:.2f}  (+kr {delta:.2f})" if delta > 0.01 else f"Alt på {store}: kr {totals[store]:.2f}",
+            delta_color="off",
+            help=f"Sum av varer der {store} er billigst. Kjøper du alt på {store}: kr {totals[store]:.2f}",
         )
 
     for store, items in mangler.items():

@@ -36,7 +36,7 @@ def search(query: str, limit: int = 5) -> list[Product]:
                 name=name,
                 price=float(src.get("pricePerUnit", 0)),
                 unit_price=f"{src.get('comparePricePerUnit', '')} kr/{src.get('compareUnit', '')}".strip(" kr/") or None,
-                url="https://www.meny.no" + src.get("slugifiedUrl", ""),
+                url="https://www.meny.no/varer" + src.get("slugifiedUrl", ""),
             )
         )
     return products
