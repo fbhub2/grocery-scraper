@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python mcp_server.py)",
+      "Bash(kill %1)",
+      "Bash(echo \"exit $?\")",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(python *)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "grocery-scraper"
+  ]
+}
