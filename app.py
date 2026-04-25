@@ -1,4 +1,3 @@
-import json
 import streamlit as st
 import pandas as pd
 import sys
@@ -7,26 +6,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).parent))
 from scrapers import oda_search, meny_search
+import db
+from normalize import parse_product_name
 
 st.set_page_config(page_title="Prissammenligning", page_icon="🛒", layout="wide")
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
-LISTE_FILE = Path(__file__).parent / "handleliste.json"
 
 
 def load_liste() -> list[str]:
-    if LISTE_FILE.exists():
-        try:
-            return json.loads(LISTE_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            return []
-    return []
-
-
-def save_liste(liste: list[str]) -> None:
-    LISTE_FILE.write_text(
-        json.dumps(liste, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    return [item["product_name"] for item in db.get_list("default")]
 
 
 def run_search(query: str, limit: int) -> tuple[dict, dict]:
@@ -69,8 +58,8 @@ with st.sidebar:
             c1, c2 = st.columns([5, 1])
             c1.write(vare.capitalize())
             if c2.button("✕", key=f"fjern_{vare}", help=f"Fjern {vare}"):
+                db.remove_item("default", vare)
                 st.session_state.handleliste.remove(vare)
-                save_liste(st.session_state.handleliste)
                 st.rerun()
 
         st.divider()
@@ -83,7 +72,8 @@ with st.sidebar:
 
             with st.spinner("Søker alle varer på listen ..."):
                 for vare in varer:
-                    res, _ = run_search(vare, 1)
+                    search_query = parse_product_name(vare)["product_name"] or vare
+                    res, _ = run_search(search_query, 1)
                     row: dict = {"Vare": vare.capitalize()}
                     for store_name in STORES:
                         prods = res.get(store_name, [])
@@ -167,8 +157,8 @@ if st.session_state.search_results is not None:
                         st.caption("✓ På handlelisten")
                     else:
                         if st.button("➕ Legg til liste", key=f"legg_{store}_{i}"):
+                            db.add_item("default", p["name"], store=store, price=p["price"])
                             st.session_state.handleliste.append(p["name"])
-                            save_liste(st.session_state.handleliste)
                             st.rerun()
                     st.divider()
 

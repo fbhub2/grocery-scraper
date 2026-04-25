@@ -3,4 +3,5 @@
 *.pyo
 resultater.json
 handleliste.json
+grocery.db
 .env

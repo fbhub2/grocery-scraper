@@ -89,6 +89,15 @@ def get_list(list_name: str = "default") -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def remove_item(list_name: str, product_name: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            """DELETE FROM list_items WHERE product_name = ?
+               AND list_id = (SELECT id FROM shopping_lists WHERE name = ?)""",
+            (product_name, list_name),
+        )
+
+
 def get_all_lists() -> list[str]:
     with _conn() as conn:
         rows = conn.execute(
