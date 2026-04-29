@@ -31,6 +31,11 @@ def run_search(query: str, limit: int) -> tuple[dict, dict]:
             except Exception as e:
                 errors[name] = str(e)
                 results[name] = []
+    
+    # Legg til OBS-produkter fra lokal database
+    obs_results = db.search_obs(query)
+    results["OBS 📰"] = obs_results
+    
     return results, errors
 
 
@@ -93,6 +98,37 @@ with st.sidebar:
             st.session_state.search_results = None
             st.rerun()
 
+    # --- OBS-status ---
+    st.divider()
+    st.subheader("📰 OBS-tilbudsavis")
+    obs_status = db.get_obs_status()
+    
+    if obs_status["has_data"]:
+        if obs_status["is_expired"]:
+            st.warning("⏰ OBS-priser utløpt")
+        else:
+            st.success(f"✅ Gyldig til {obs_status['valid_to']}")
+        
+        col1, col2 = st.columns(2)
+        col1.metric("Produkter", obs_status["total_products"])
+        col2.write(f"**Uke:** {obs_status['valid_week']}")
+        
+        if st.button("🔄 Oppdater OBS", use_container_width=True, key="update_obs"):
+            st.info("""
+                **Slik importerer du ny OBS-uke:**
+                
+                1. Åpne https://kundeavis-obs.coop.no/fso/
+                2. Last ned eller ta screenshot av kundeavisen
+                3. Åpne Claude Desktop eller claude.ai/code
+                4. Bruk `import_obs_catalog` tool med PDF/bilde
+                5. Produktene lagres automatisk i databasen
+                
+                **Eller:** Les detaljert guide i `obs_import.md`
+            """)
+    else:
+        st.caption("Ingen OBS-data importert ennå")
+        st.button("📥 Importer OBS nå", use_container_width=True, key="import_obs_first")
+
 
 # --- Topp ---
 st.title("🛒 Prissammenligning")
@@ -118,9 +154,15 @@ if submitted:
     with st.spinner(f'Søker etter "{query.strip()}" ...'):
         results, errors = run_search(query.strip(), int(limit))
 
-    st.session_state.search_results = {
-        k: [p.to_dict() for p in v] for k, v in results.items()
-    }
+    # Konverter Product-objekter til dicts, behold OBS-dicts som de er
+    converted_results = {}
+    for store, products in results.items():
+        if store == "OBS 📰":
+            converted_results[store] = products  # Allerede dicts
+        else:
+            converted_results[store] = [p.to_dict() if hasattr(p, 'to_dict') else p for p in products]
+    
+    st.session_state.search_results = converted_results
     st.session_state.search_errors = errors
     st.session_state.last_query = query.strip()
     st.session_state.liste_resultater = None
@@ -134,8 +176,9 @@ if st.session_state.search_results is not None:
 
     liste_set = {v.lower() for v in st.session_state.handleliste}
 
-    cols = st.columns(len(STORES))
-    for col, store in zip(cols, STORES):
+    stores_to_show = list(results.keys())
+    cols = st.columns(len(stores_to_show))
+    for col, store in zip(cols, stores_to_show):
         with col:
             st.subheader(store)
             if store in errors:
@@ -144,29 +187,51 @@ if st.session_state.search_results is not None:
                 st.info("Ingen resultater")
             else:
                 for i, p in enumerate(results[store]):
-                    price_line = f"kr {p['price']:.2f}"
-                    if p.get("unit_price"):
-                        price_line += f"  _{p['unit_price']}_"
-                    st.markdown(f"**{p['name']}**")
-                    if p.get("variant"):
-                        st.caption(p["variant"])
+                    is_obs = store == "OBS 📰"
+                    
+                    # Håndter både regular produkter og OBS
+                    name = p.get("product_name") if is_obs else p.get("name")
+                    price = p.get("price")
+                    unit_price = p.get("unit_price") if not is_obs else None
+                    variant = p.get("volume") if is_obs else p.get("variant")
+                    url = p.get("url") if not is_obs else None
+                    valid_to = p.get("valid_to") if is_obs else None
+                    
+                    price_line = f"kr {price:.2f}"
+                    if unit_price:
+                        price_line += f"  _{unit_price}_"
+                    
+                    st.markdown(f"**{name}**")
+                    if variant:
+                        st.caption(variant)
                     st.markdown(price_line)
-                    if p.get("url"):
-                        st.markdown(f"[Se produkt]({p['url']})")
-                    if p["name"].lower() in liste_set:
+                    
+                    # Vis validitetsperiode for OBS
+                    if is_obs and valid_to:
+                        from datetime import date
+                        is_expired = valid_to < date.today().isoformat()
+                        if is_expired:
+                            st.caption("⏰ Utløpt")
+                        else:
+                            st.caption(f"✅ Gyldig til {valid_to}")
+                    
+                    if url:
+                        st.markdown(f"[Se produkt]({url})")
+                    
+                    if name.lower() in liste_set:
                         st.caption("✓ På handlelisten")
                     else:
                         if st.button("➕ Legg til liste", key=f"legg_{store}_{i}"):
-                            db.add_item("default", p["name"], store=store, price=p["price"])
-                            st.session_state.handleliste.append(p["name"])
+                            db.add_item("default", name, store=store, price=price)
+                            st.session_state.handleliste.append(name)
                             st.rerun()
                     st.divider()
 
     all_rows = [
         {
             "Butikk": store,
-            "Produkt": p["name"],
-            "Mengde": p.get("variant") or "",
+            "Produkt": p.get("product_name") if store == "OBS 📰" else p.get("name"),
+            "Mengde": p.get("volume") if store == "OBS 📰" else p.get("variant") or "",
             "Pris (kr)": p["price"],
             "Per enhet": p.get("unit_price") or "",
         }
