@@ -6,16 +6,23 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).parent))
 from scrapers import oda_search, meny_search
+from scrapers.base import split_name_variant
 import db
-from normalize import parse_product_name
+from normalize import parse_product_name, normalize_search_term
 
 st.set_page_config(page_title="Prissammenligning", page_icon="🛒", layout="wide")
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
 
 
-def load_liste() -> list[str]:
-    return [item["product_name"] for item in db.get_list("default")]
+def load_liste() -> list[dict]:
+    return db.get_list("default")
+
+
+def _item_display(name: str, volume: str | None) -> None:
+    st.write(name.capitalize())
+    if volume:
+        st.caption(volume)
 
 
 def run_search(query: str, limit: int) -> tuple[dict, dict]:
@@ -31,11 +38,10 @@ def run_search(query: str, limit: int) -> tuple[dict, dict]:
             except Exception as e:
                 errors[name] = str(e)
                 results[name] = []
-    
-    # Legg til OBS-produkter fra lokal database
+
     obs_results = db.search_obs(query)
     results["OBS 📰"] = obs_results
-    
+
     return results, errors
 
 
@@ -59,14 +65,16 @@ with st.sidebar:
     if not st.session_state.handleliste:
         st.caption("Listen er tom. Søk etter en vare og legg den til.")
     else:
-        # Opprett mutable liste for fjernknapper (since we modify during iteration)
         handleliste_copy = list(st.session_state.handleliste)
-        for idx, vare in enumerate(handleliste_copy):
+        for idx, item in enumerate(handleliste_copy):
             c1, c2 = st.columns([5, 1])
-            c1.write(vare.capitalize())
-            if c2.button("✕", key=f"fjern_idx_{idx}", help=f"Fjern {vare}"):
-                db.remove_item("default", vare)
-                st.session_state.handleliste.remove(vare)
+            with c1:
+                _item_display(item["product_name"], item.get("volume"))
+            if c2.button("✕", key=f"fjern_idx_{idx}", help=f"Fjern {item['product_name']}"):
+                db.remove_item("default", item["product_name"], item_id=item.get("id"))
+                st.session_state.handleliste = [
+                    i for i in st.session_state.handleliste if i.get("id") != item.get("id")
+                ]
                 st.rerun()
 
         st.divider()
@@ -78,10 +86,14 @@ with st.sidebar:
             mangler: dict[str, list[str]] = {s: [] for s in STORES}
 
             with st.spinner("Søker alle varer på listen ..."):
-                for vare in varer:
-                    search_query = parse_product_name(vare)["product_name"] or vare
+                for item in varer:
+                    vare = item["product_name"]
+                    search_query = item.get("search_term") or normalize_search_term(vare)
                     res, _ = run_search(search_query, 1)
-                    row: dict = {"Vare": vare.capitalize()}
+                    vare_label = vare.capitalize()
+                    if item.get("volume"):
+                        vare_label += f" ({item['volume']})"
+                    row: dict = {"Vare": vare_label}
                     for store_name in STORES:
                         prods = res.get(store_name, [])
                         if prods:
@@ -104,27 +116,27 @@ with st.sidebar:
     st.divider()
     st.subheader("📰 OBS-tilbudsavis")
     obs_status = db.get_obs_status()
-    
+
     if obs_status["has_data"]:
         if obs_status["is_expired"]:
             st.warning("⏰ OBS-priser utløpt")
         else:
             st.success(f"✅ Gyldig til {obs_status['valid_to']}")
-        
+
         col1, col2 = st.columns(2)
         col1.metric("Produkter", obs_status["total_products"])
         col2.write(f"**Uke:** {obs_status['valid_week']}")
-        
+
         if st.button("🔄 Oppdater OBS", use_container_width=True, key="update_obs"):
             st.info("""
                 **Slik importerer du ny OBS-uke:**
-                
+
                 1. Åpne https://kundeavis-obs.coop.no/fso/
                 2. Last ned eller ta screenshot av kundeavisen
                 3. Åpne Claude Desktop eller claude.ai/code
                 4. Bruk `import_obs_catalog` tool med PDF/bilde
                 5. Produktene lagres automatisk i databasen
-                
+
                 **Eller:** Les detaljert guide i `obs_import.md`
             """)
     else:
@@ -156,14 +168,13 @@ if submitted:
     with st.spinner(f'Søker etter "{query.strip()}" ...'):
         results, errors = run_search(query.strip(), int(limit))
 
-    # Konverter Product-objekter til dicts, behold OBS-dicts som de er
     converted_results = {}
     for store, products in results.items():
         if store == "OBS 📰":
-            converted_results[store] = products  # Allerede dicts
+            converted_results[store] = products
         else:
-            converted_results[store] = [p.to_dict() if hasattr(p, 'to_dict') else p for p in products]
-    
+            converted_results[store] = [p.to_dict() if hasattr(p, "to_dict") else p for p in products]
+
     st.session_state.search_results = converted_results
     st.session_state.search_errors = errors
     st.session_state.last_query = query.strip()
@@ -176,7 +187,7 @@ if st.session_state.search_results is not None:
     results = st.session_state.search_results
     errors = st.session_state.search_errors
 
-    liste_set = {v.lower() for v in st.session_state.handleliste}
+    liste_set = {item["product_name"].lower() for item in st.session_state.handleliste}
 
     stores_to_show = list(results.keys())
     cols = st.columns(len(stores_to_show))
@@ -190,25 +201,23 @@ if st.session_state.search_results is not None:
             else:
                 for i, p in enumerate(results[store]):
                     is_obs = store == "OBS 📰"
-                    
-                    # Håndter både regular produkter og OBS
+
                     name = p.get("product_name") if is_obs else p.get("name")
                     price = p.get("price")
                     unit_price = p.get("unit_price") if not is_obs else None
                     variant = p.get("volume") if is_obs else p.get("variant")
                     url = p.get("url") if not is_obs else None
                     valid_to = p.get("valid_to") if is_obs else None
-                    
+
                     price_line = f"kr {price:.2f}"
                     if unit_price:
                         price_line += f"  _{unit_price}_"
-                    
+
                     st.markdown(f"**{name}**")
                     if variant:
                         st.caption(variant)
                     st.markdown(price_line)
-                    
-                    # Vis validitetsperiode for OBS
+
                     if is_obs and valid_to:
                         from datetime import date
                         is_expired = valid_to < date.today().isoformat()
@@ -216,16 +225,21 @@ if st.session_state.search_results is not None:
                             st.caption("⏰ Utløpt")
                         else:
                             st.caption(f"✅ Gyldig til {valid_to}")
-                    
+
                     if url:
                         st.markdown(f"[Se produkt]({url})")
-                    
+
                     if name.lower() in liste_set:
                         st.caption("✓ På handlelisten")
                     else:
                         if st.button("➕ Legg til liste", key=f"legg_{store}_{i}"):
-                            db.add_item("default", name, store=store, price=price)
-                            st.session_state.handleliste.append(name)
+                            search_term = normalize_search_term(name)
+                            db.add_item(
+                                "default", name,
+                                store=store, price=price,
+                                volume=variant, search_term=search_term,
+                            )
+                            st.session_state.handleliste = load_liste()
                             st.rerun()
                     st.divider()
 
@@ -262,7 +276,6 @@ elif st.session_state.liste_resultater is not None:
 
     st.subheader("Handlelisteprissammenligning")
 
-    # Per-item: finn billigste butikk og beregn summer
     optimal_total = 0.0
     store_best_sums = {s: 0.0 for s in STORES}
     rows_display = []
@@ -284,7 +297,6 @@ elif st.session_state.liste_resultater is not None:
         hide_index=True,
     )
 
-    # Oppsummering
     st.subheader("Oppsummering")
     m_cols = st.columns(1 + len(STORES))
     m_cols[0].metric("🏆 Optimal sum", f"kr {optimal_total:.2f}",
