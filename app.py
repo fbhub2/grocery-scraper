@@ -260,14 +260,33 @@ if st.session_state.search_results is not None:
             df = df[df["Butikk"].isin(valgte_butikker)]
         df = df.sort_values(sorter_etter, na_position="last").reset_index(drop=True)
 
-        st.dataframe(
+        selection = st.dataframe(
             df,
             column_config={
                 "Pris (kr)": st.column_config.NumberColumn(format="%.2f kr"),
             },
             use_container_width=True,
             hide_index=True,
+            on_select="rerun",
+            selection_mode="multi-row",
         )
+
+        selected_rows = selection.selection.rows if selection else []
+        if selected_rows:
+            if st.button(f"➕ Legg til valgte ({len(selected_rows)}) på handlelisten"):
+                for row_idx in selected_rows:
+                    row = df.iloc[row_idx]
+                    name = row["Produkt"]
+                    if name and name.lower() not in liste_set:
+                        db.add_item(
+                            "default", name,
+                            store=row["Butikk"],
+                            price=float(row["Pris (kr)"]),
+                            volume=row["Mengde"] or None,
+                            search_term=normalize_search_term(name),
+                        )
+                st.session_state.handleliste = load_liste()
+                st.rerun()
 
     st.divider()
 
