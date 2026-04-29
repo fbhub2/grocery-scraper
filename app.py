@@ -59,10 +59,12 @@ with st.sidebar:
     if not st.session_state.handleliste:
         st.caption("Listen er tom. Søk etter en vare og legg den til.")
     else:
-        for vare in list(st.session_state.handleliste):
+        # Opprett mutable liste for fjernknapper (since we modify during iteration)
+        handleliste_copy = list(st.session_state.handleliste)
+        for idx, vare in enumerate(handleliste_copy):
             c1, c2 = st.columns([5, 1])
             c1.write(vare.capitalize())
-            if c2.button("✕", key=f"fjern_{vare}", help=f"Fjern {vare}"):
+            if c2.button("✕", key=f"fjern_idx_{idx}", help=f"Fjern {vare}"):
                 db.remove_item("default", vare)
                 st.session_state.handleliste.remove(vare)
                 st.rerun()
