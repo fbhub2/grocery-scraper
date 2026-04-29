@@ -30,7 +30,8 @@ def _init() -> None:
                 image_url    TEXT,
                 quantity     INTEGER DEFAULT 1,
                 added_at     TEXT DEFAULT (datetime('now')),
-                checked      INTEGER DEFAULT 0
+                checked      INTEGER DEFAULT 0,
+                search_term  TEXT
             );
             CREATE TABLE IF NOT EXISTS obs_products (
                 id           INTEGER PRIMARY KEY,
@@ -48,16 +49,21 @@ def _init() -> None:
                 valid_updated_at TEXT DEFAULT (datetime('now'))
             );
         """)
-        
+
         # Migration: legg til kolonner hvis de ikke finnes
         cursor = conn.cursor()
+
         cursor.execute("PRAGMA table_info(obs_products)")
-        columns = {row[1] for row in cursor.fetchall()}
-        
-        if "valid_week" not in columns:
+        obs_cols = {row[1] for row in cursor.fetchall()}
+        if "valid_week" not in obs_cols:
             conn.execute("ALTER TABLE obs_products ADD COLUMN valid_week TEXT")
-        if "valid_updated_at" not in columns:
+        if "valid_updated_at" not in obs_cols:
             conn.execute("ALTER TABLE obs_products ADD COLUMN valid_updated_at TEXT DEFAULT (datetime('now'))")
+
+        cursor.execute("PRAGMA table_info(list_items)")
+        item_cols = {row[1] for row in cursor.fetchall()}
+        if "search_term" not in item_cols:
+            conn.execute("ALTER TABLE list_items ADD COLUMN search_term TEXT")
 
 
 _init()
@@ -79,14 +85,15 @@ def add_item(
     image_url: str = None,
     brand: str = None,
     volume: str = None,
+    search_term: str = None,
 ) -> None:
     with _conn() as conn:
         list_id = _ensure_list(conn, list_name)
         conn.execute(
             """INSERT INTO list_items
-               (list_id, product_name, brand, volume, store, price, image_url, quantity)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (list_id, product_name, brand, volume, store, price, image_url, quantity),
+               (list_id, product_name, brand, volume, store, price, image_url, quantity, search_term)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (list_id, product_name, brand, volume, store, price, image_url, quantity, search_term),
         )
 
 
@@ -101,13 +108,21 @@ def get_list(list_name: str = "default") -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def remove_item(list_name: str, product_name: str) -> None:
+def remove_item(list_name: str, product_name: str, item_id: int = None) -> None:
+    """Fjern en vare fra handlelisten. Bruk item_id for presis sletting hvis tilgjengelig."""
     with _conn() as conn:
-        conn.execute(
-            """DELETE FROM list_items WHERE product_name = ?
-               AND list_id = (SELECT id FROM shopping_lists WHERE name = ?)""",
-            (product_name, list_name),
-        )
+        if item_id is not None:
+            conn.execute(
+                """DELETE FROM list_items WHERE id = ?
+                   AND list_id = (SELECT id FROM shopping_lists WHERE name = ?)""",
+                (item_id, list_name),
+            )
+        else:
+            conn.execute(
+                """DELETE FROM list_items WHERE product_name = ?
+                   AND list_id = (SELECT id FROM shopping_lists WHERE name = ?)""",
+                (product_name, list_name),
+            )
 
 
 def get_all_lists() -> list[str]:
@@ -156,21 +171,13 @@ def search_obs(query: str) -> list[dict]:
 
 
 def get_obs_status() -> dict:
-    """
-    Hent status for OBS-produkter:
-    - total antall
-    - gyldig til dato
-    - er det utløpt?
-    - uke-info
-    """
     today = date.today().isoformat()
     with _conn() as conn:
-        # Hent alle OBS-produkter (uavhengig av gyldighet)
         rows = conn.execute(
             """SELECT DISTINCT valid_from, valid_to, valid_week
                FROM obs_products ORDER BY valid_to DESC LIMIT 1"""
         ).fetchone()
-        
+
         if not rows:
             return {
                 "has_data": False,
@@ -180,19 +187,17 @@ def get_obs_status() -> dict:
                 "valid_week": None,
                 "is_expired": True,
             }
-        
+
         valid_from = rows["valid_from"]
         valid_to = rows["valid_to"]
         valid_week = rows["valid_week"]
         is_expired = valid_to < today if valid_to else True
-        
-        # Antall gyldig i dag
+
         count_active = conn.execute(
-            """SELECT COUNT(*) as cnt FROM obs_products
-               WHERE valid_to >= ?""",
+            """SELECT COUNT(*) as cnt FROM obs_products WHERE valid_to >= ?""",
             (today,),
         ).fetchone()["cnt"]
-        
+
         return {
             "has_data": True,
             "total_products": count_active,
@@ -204,10 +209,6 @@ def get_obs_status() -> dict:
 
 
 def clear_expired_obs() -> int:
-    """
-    Slett OBS-produkter som er utløpt.
-    Returnerer antall slettede produkter.
-    """
     today = date.today().isoformat()
     with _conn() as conn:
         cursor = conn.execute(

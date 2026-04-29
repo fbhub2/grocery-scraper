@@ -1,6 +1,19 @@
 import re
 
 
+def normalize_search_term(raw: str) -> str:
+    """
+    Normaliser et søkeord for matching på tvers av butikker.
+    Fjerner volum-tokens, gjør lowercase, trimmer whitespace.
+    Eksempel: "Tine Lettmelk 1,5 l" -> "tine lettmelk"
+    """
+    cleaned = re.sub(
+        r'\d+[\.,]?\d*\s*(ml|l|g|kg|cl|dl|stk)', '', raw, flags=re.IGNORECASE
+    )
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip().lower()
+    return cleaned
+
+
 def parse_product_name(raw_name: str) -> dict:
     """
     Trekk ut strukturerte felt fra råproduktnavn.
