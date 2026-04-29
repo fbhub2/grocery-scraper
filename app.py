@@ -25,6 +25,35 @@ def _item_display(name: str, volume: str | None) -> None:
         st.caption(volume)
 
 
+def _query_variants(query: str, volume: str | None) -> list[str]:
+    variants = [query]
+    if volume:
+        v_nospace = volume.replace(" ", "")
+        variants.append(f"{query} {v_nospace}")
+    return list(dict.fromkeys(variants))
+
+
+def _best_product(products: list, preferred_volume: str | None):
+    """Returnerer produktet som best matcher preferred_volume, eller første resultat."""
+    if not products:
+        return None
+    if not preferred_volume:
+        return products[0]
+    pv = preferred_volume.lower()
+    for p in products:
+        v = (p.get("variant") if isinstance(p, dict) else getattr(p, "variant", "")) or ""
+        if pv in v.lower() or v.lower() in pv:
+            return p
+    return products[0]
+
+
+def _best_price(products: list, preferred_volume: str | None) -> float | None:
+    p = _best_product(products, preferred_volume)
+    if p is None:
+        return None
+    return p["price"] if isinstance(p, dict) else p.price
+
+
 def run_search(query: str, limit: int) -> tuple[dict, dict]:
     results, errors = {}, {}
     with ThreadPoolExecutor(max_workers=len(STORES)) as executor:
@@ -88,19 +117,27 @@ with st.sidebar:
             with st.spinner("Søker alle varer på listen ..."):
                 for item in varer:
                     vare = item["product_name"]
+                    preferred_volume = item.get("volume")
                     search_query = item.get("search_term") or normalize_search_term(vare)
-                    res, _ = run_search(search_query, 1)
+                    res, _ = run_search(search_query, 3)
                     vare_label = vare.capitalize()
-                    if item.get("volume"):
-                        vare_label += f" ({item['volume']})"
+                    if preferred_volume:
+                        vare_label += f" ({preferred_volume})"
                     row: dict = {"Vare": vare_label}
                     for store_name in STORES:
                         prods = res.get(store_name, [])
-                        if prods:
-                            row[store_name] = prods[0].price
-                            totals[store_name] += prods[0].price
+                        best = _best_product(prods, preferred_volume)
+                        if best:
+                            price = best.price if hasattr(best, "price") else best["price"]
+                            unit_price = getattr(best, "unit_price", None) or (
+                                best.get("unit_price") if isinstance(best, dict) else None
+                            )
+                            row[store_name] = price
+                            row[f"{store_name} (enhet)"] = unit_price or ""
+                            totals[store_name] += price
                         else:
                             row[store_name] = None
+                            row[f"{store_name} (enhet)"] = ""
                             mangler[store_name].append(vare)
                     rows.append(row)
 
@@ -189,6 +226,52 @@ if st.session_state.search_results is not None:
 
     liste_set = {item["product_name"].lower() for item in st.session_state.handleliste}
 
+    # --- Sammenstilt tabell ØVERST med filtre ---
+    all_rows = [
+        {
+            "Butikk": store,
+            "Produkt": p.get("product_name") if store == "OBS 📰" else p.get("name"),
+            "Mengde": p.get("volume") if store == "OBS 📰" else p.get("variant") or "",
+            "Pris (kr)": p["price"],
+            "Per enhet": p.get("unit_price") or "",
+        }
+        for store, prods in results.items()
+        for p in prods
+    ]
+
+    if all_rows:
+        st.subheader(f'Resultater for "{q}"')
+
+        f1, f2 = st.columns([3, 2])
+        with f1:
+            available_stores = list(results.keys())
+            valgte_butikker = st.multiselect(
+                "Vis butikker", available_stores, default=available_stores,
+                key="filter_butikker",
+            )
+        with f2:
+            sorter_etter = st.selectbox(
+                "Sorter etter", ["Pris (kr)", "Produkt", "Butikk"],
+                key="filter_sortering",
+            )
+
+        df = pd.DataFrame(all_rows)
+        if valgte_butikker:
+            df = df[df["Butikk"].isin(valgte_butikker)]
+        df = df.sort_values(sorter_etter, na_position="last").reset_index(drop=True)
+
+        st.dataframe(
+            df,
+            column_config={
+                "Pris (kr)": st.column_config.NumberColumn(format="%.2f kr"),
+            },
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.divider()
+
+    # --- Per-butikk kolonner ---
     stores_to_show = list(results.keys())
     cols = st.columns(len(stores_to_show))
     for col, store in zip(cols, stores_to_show):
@@ -243,29 +326,6 @@ if st.session_state.search_results is not None:
                             st.rerun()
                     st.divider()
 
-    all_rows = [
-        {
-            "Butikk": store,
-            "Produkt": p.get("product_name") if store == "OBS 📰" else p.get("name"),
-            "Mengde": p.get("volume") if store == "OBS 📰" else p.get("variant") or "",
-            "Pris (kr)": p["price"],
-            "Per enhet": p.get("unit_price") or "",
-        }
-        for store, prods in results.items()
-        for p in prods
-    ]
-    if all_rows:
-        st.subheader("Alle resultater sortert på pris")
-        df = pd.DataFrame(all_rows).sort_values("Pris (kr)").reset_index(drop=True)
-        st.dataframe(
-            df,
-            column_config={
-                "Pris (kr)": st.column_config.NumberColumn(format="%.2f kr")
-            },
-            use_container_width=True,
-            hide_index=True,
-        )
-
 
 # --- Handlelistesøk-resultater ---
 elif st.session_state.liste_resultater is not None:
@@ -289,7 +349,11 @@ elif st.session_state.liste_resultater is not None:
             best = "—"
         rows_display.append({**row, "Billigst": best})
 
-    col_config = {s: st.column_config.NumberColumn(s, format="%.2f kr") for s in STORES}
+    col_config: dict = {}
+    for s in STORES:
+        col_config[s] = st.column_config.NumberColumn(s, format="%.2f kr")
+        col_config[f"{s} (enhet)"] = st.column_config.TextColumn(f"{s}/enhet")
+
     st.dataframe(
         pd.DataFrame(rows_display),
         column_config=col_config,
