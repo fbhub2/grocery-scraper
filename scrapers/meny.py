@@ -37,7 +37,7 @@ def search(query: str, limit: int = 5) -> list[Product]:
                 url="https://www.meny.no/varer" + src.get("slugifiedUrl", ""),
                 variant=variant,
                 image_url=(
-                    f"https://res.cloudinary.com/norgesgruppen/image/upload/c_pad,b_white,f_auto,q_auto,w_200/{src['imagePath']}"
+                    f"https://bilder.ngdata.no/{src['imagePath']}/large.jpg"
                     if src.get("imagePath") else None
                 ),
             )
