@@ -12,16 +12,12 @@ Prioritert liste. Øverst = viktigst. Flytt fritt mellom seksjoner.
 
 ## 🟡 Medium prioritet
 
-- [ ] **Produktbilde i resultat**
-  - `image_url` er tilgjengelig i API-svar fra Oda og Meny
-  - Vis i Streamlit med `st.image()` ved søk og i handleliste
+*(ingen gjenstående)*
 
 ---
 
 ## 🔵 Lav prioritet / langsiktig
 
-- [x] Prishistorikk over tid – spore prisutvikling per produkt i SQLite
-- [ ] Varsling ved prisfall på favoritter
 - [ ] Rema 1000 støtte – når/hvis API blir tilgjengelig igjen
 
 ---
@@ -50,6 +46,14 @@ Prioritert liste. Øverst = viktigst. Flytt fritt mellom seksjoner.
 - [x] **Volume-matching i handlelistesøk**
   - `_best_product()` velger beste volum-match
   - Enhetspris per butikk i handlelistetabell
+- [x] **Produktbilde i resultat**
+  - `image_url` fra Oda og Meny vises i søkeresultater og sidebar
+- [x] **Prishistorikk over tid**
+  - `price_history`-tabell i SQLite, `record_price()`, `get_price_trend()`
+  - Trend-kolonne (↑↓→) i handlelistetabell
+- [x] **Varsling ved prisfall**
+  - `st.success()` banner per vare med prisfall etter «Søk alle på listen»
+  - Badge per vare i sidebar når prisfall er registrert
 
 ---
 

@@ -97,10 +97,15 @@ with st.sidebar:
         st.caption("Listen er tom. Søk etter en vare og legg den til.")
     else:
         handleliste_copy = list(st.session_state.handleliste)
+        sidebar_trends = (st.session_state.liste_resultater or {}).get("trends", {})
+
         for idx, item in enumerate(handleliste_copy):
             c1, c2 = st.columns([5, 1])
             with c1:
                 _item_display(item["product_name"], item.get("volume"), item.get("image_url"))
+                item_trends = sidebar_trends.get(item["product_name"], {})
+                for sname, t in item_trends.items():
+                    st.caption(f"↓ {sname}: -{abs(t['delta']):.2f} kr siden sist")
             if c2.button("✕", key=f"fjern_idx_{idx}", help=f"Fjern {item['product_name']}"):
                 db.remove_item("default", item["product_name"], item_id=item.get("id"))
                 st.session_state.handleliste = [
@@ -115,6 +120,8 @@ with st.sidebar:
             rows = []
             totals = {s: 0.0 for s in STORES}
             mangler: dict[str, list[str]] = {s: [] for s in STORES}
+
+            trends: dict[str, dict[str, dict]] = {}
 
             with st.spinner("Søker alle varer på listen ..."):
                 for item in varer:
@@ -139,6 +146,9 @@ with st.sidebar:
                             totals[store_name] += price
                             db.record_price(vare, store_name, price,
                                             unit_price=unit_price, volume=preferred_volume)
+                            t = db.get_price_trend(vare, store_name)
+                            if t and t["delta"] < -0.01:
+                                trends.setdefault(vare, {})[store_name] = t
                         else:
                             row[store_name] = None
                             row[f"{store_name} (enhet)"] = ""
@@ -149,6 +159,7 @@ with st.sidebar:
                 "rows": rows,
                 "totals": totals,
                 "mangler": mangler,
+                "trends": trends,
             }
             st.session_state.search_results = None
             st.rerun()
@@ -360,6 +371,15 @@ elif st.session_state.liste_resultater is not None:
     rows = lr["rows"]
     totals: dict[str, float] = lr["totals"]
     mangler: dict[str, list[str]] = lr["mangler"]
+    trends: dict[str, dict[str, dict]] = lr.get("trends", {})
+
+    if trends:
+        for vare, store_trends in trends.items():
+            for store_name, t in store_trends.items():
+                st.success(
+                    f"↓ Prisfall! **{vare.capitalize()}** er billigere på {store_name}: "
+                    f"kr {t['current']:.2f} (var kr {t['previous']:.2f}, spart kr {abs(t['delta']):.2f})"
+                )
 
     st.subheader("Handlelisteprissammenligning")
 
