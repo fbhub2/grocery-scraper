@@ -4,24 +4,24 @@
 
 ---
 
-## ✅ Nå: Produktbilde i resultat
+## ✅ Nå: Varsling ved prisfall
 
-Vis `image_url` fra Oda og Meny direkte i Streamlit-appen.
+Gi brukeren beskjed når en vare på handlelisten har falt i pris siden sist søk.
 
-**Branch:** `feature/produktbilde`
+**Branch:** `feature/prisvarsel`
 
 ```powershell
-git checkout -b feature/produktbilde
+git checkout -b feature/prisvarsel
 ```
 
 **Scope:**
-- Søkeresultater per butikk: vis `st.image(url, width=80)` over produktnavn
-- Handleliste i sidebar: vis miniatyrbilde hvis `image_url` er lagret på varen
-- `db.add_item()` tar allerede `image_url=` — bare bruk den
+- Bruk eksisterende `get_price_trend()` fra db.py
+- Etter "Søk alle på listen": vis `st.success("↓ Prisfall!")` per vare der `trend["delta"] < 0`
+- Vis i sidebar under handlelisten: liten badge/caption med "Prisfall siden sist" hvis trend finnes
 
 **Ikke gjør:**
-- Ikke last ned bilder lokalt
-- Ikke endre API-kall — `image_url` er allerede i `Product.to_dict()`
+- Ingen e-post eller push-varsler — kun i-app visning
+- Ingen ny database-tabell — alt data finnes allerede i price_history
 
 ---
 

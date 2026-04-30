@@ -20,7 +20,7 @@ Prioritert liste. Øverst = viktigst. Flytt fritt mellom seksjoner.
 
 ## 🔵 Lav prioritet / langsiktig
 
-- [ ] Prishistorikk over tid – spore prisutvikling per produkt i SQLite
+- [x] Prishistorikk over tid – spore prisutvikling per produkt i SQLite
 - [ ] Varsling ved prisfall på favoritter
 - [ ] Rema 1000 støtte – når/hvis API blir tilgjengelig igjen
 
