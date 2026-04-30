@@ -36,6 +36,10 @@ def search(query: str, limit: int = 5) -> list[Product]:
                 unit_price=f"{src.get('comparePricePerUnit', '')} kr/{src.get('compareUnit', '')}".strip(" kr/") or None,
                 url="https://www.meny.no/varer" + src.get("slugifiedUrl", ""),
                 variant=variant,
+                image_url=(
+                    f"https://bilder.ngdata.no/{src['imagePath']}/large.jpg"
+                    if src.get("imagePath") else None
+                ),
             )
         )
     return products
