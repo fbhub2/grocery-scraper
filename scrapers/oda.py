@@ -17,7 +17,13 @@ def search(query: str, limit: int = 5) -> list[Product]:
         a = item["attributes"]
         unit = f"{a.get('gross_unit_price', '')} kr/{a.get('unit_price_quantity_abbreviation', '')}".strip(" kr/") or None
         images = a.get("images") or []
-        image_url = images[0].get("thumbnail") if images else None
+        image_url = None
+        if images and isinstance(images[0], dict):
+            thumb = images[0].get("thumbnail")
+            if isinstance(thumb, dict):
+                image_url = thumb.get("url")
+            elif isinstance(thumb, str):
+                image_url = thumb
         products.append(Product(
             name=a["name"],
             price=float(a["gross_price"]),

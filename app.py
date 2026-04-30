@@ -20,7 +20,7 @@ def load_liste() -> list[dict]:
 
 
 def _item_display(name: str, volume: str | None, image_url: str | None = None) -> None:
-    if image_url:
+    if image_url and isinstance(image_url, str):
         st.image(image_url, width=50)
     st.write(name.capitalize())
     if volume:
@@ -318,7 +318,7 @@ if st.session_state.search_results is not None:
                     if unit_price:
                         price_line += f"  _{unit_price}_"
 
-                    if image_url:
+                    if image_url and isinstance(image_url, str):
                         st.image(image_url, width=80)
                     st.markdown(f"**{name}**")
                     if variant:
