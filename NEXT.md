@@ -4,25 +4,25 @@
 
 ---
 
-## ✅ Nå: Varsling ved prisfall
+## Nå: Velg neste oppgave fra BACKLOG.md
 
-Gi brukeren beskjed når en vare på handlelisten har falt i pris siden sist søk.
+Alle planlagte features er implementert:
 
-**Branch:** `feature/prisvarsel`
+- [x] MCP-server
+- [x] SQLite-lagring + normalisering
+- [x] OBS-import
+- [x] Søkeresultater-tabell med filtre
+- [x] Volume-matching + enhetspris
+- [x] Produktbilder
+- [x] Prishistorikk + trendvisning
+- [x] Prisvarsel (in-app, ved søk alle på listen)
 
-```powershell
-git checkout -b feature/prisvarsel
-```
+**Backlog** har kun `Rema 1000` igjen som lav-prioritet oppgave (API ikke-funksjonelt).
 
-**Scope:**
-- Bruk eksisterende `get_price_trend()` fra db.py
-- Etter "Søk alle på listen": vis `st.success("↓ Prisfall!")` per vare der `trend["delta"] < 0`
-- Vis i sidebar under handlelisten: liten badge/caption med "Prisfall siden sist" hvis trend finnes
-
-**Ikke gjør:**
-- Ingen e-post eller push-varsler — kun i-app visning
-- Ingen ny database-tabell — alt data finnes allerede i price_history
+Mulige neste retninger:
+- Rema 1000 (vente til API er tilgjengelig)
+- Ny feature fra bruker
 
 ---
 
-*Oppdater denne filen når steget er fullført og du velger neste oppgave fra BACKLOG.md.*
+*Oppdater denne filen når du velger neste oppgave.*
