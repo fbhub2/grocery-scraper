@@ -229,7 +229,6 @@ async def call_tool(name: str, arguments: dict):
 
 
 async def main() -> None:
-    print("Grocery Scraper MCP server running on stdio")
     async with stdio_server() as (r, w):
         await app.run(r, w, app.create_initialization_options())
 
