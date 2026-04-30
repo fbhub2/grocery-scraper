@@ -13,7 +13,7 @@ mittprosjekt/
   app.py               # Streamlit web-app
   db.py                # SQLite-lag (handleliste + OBS-produkter)
   normalize.py         # normalize_search_term(), parse_product_name()
-  mcp_server.py        # MCP-server (ferdig implementert)
+  grocery_scraper_mcp.py  # MCP-server (ferdig implementert)
   grocery.db           # SQLite-database (ikke i git)
   scrapers/
     oda.py             # Oda-scraper (direkte HTTP via httpx)
@@ -29,7 +29,7 @@ mittprosjekt/
 - Oda og Meny bruker **ren HTTP med httpx** — ikke selenium, ikke playwright
 - **Rema 1000:** `scrapers/rema.py` finnes men kobles IKKE inn — `rema.no/api/products` er ikke-funksjonelt
 - **Ingen Kassal API** — tidligere vurdert, ikke i bruk
-- `rapidfuzz>=3.0` er i requirements.txt og brukes i `mcp_server.py` for fuzzy-ranking
+- `rapidfuzz>=3.0` er i requirements.txt og brukes i `grocery_scraper_mcp.py` for fuzzy-ranking
 - Sjekk alltid faktisk filstruktur med `dir` / `Get-ChildItem` før du antar importstier
 
 ## Hva Claude Code må gjøre ved oppstart
