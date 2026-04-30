@@ -183,7 +183,7 @@ def get_price_trend(product_name: str, store: str) -> dict | None:
         rows = conn.execute(
             """SELECT price FROM price_history
                WHERE product_name = ? AND store = ?
-               ORDER BY recorded_at DESC LIMIT 2""",
+               ORDER BY id DESC LIMIT 2""",
             (product_name, store),
         ).fetchall()
     if len(rows) < 2:
