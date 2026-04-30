@@ -16,12 +16,15 @@ def search(query: str, limit: int = 5) -> list[Product]:
             continue
         a = item["attributes"]
         unit = f"{a.get('gross_unit_price', '')} kr/{a.get('unit_price_quantity_abbreviation', '')}".strip(" kr/") or None
+        images = a.get("images") or []
+        image_url = images[0].get("thumbnail") if images else None
         products.append(Product(
             name=a["name"],
             price=float(a["gross_price"]),
             unit_price=unit,
             url=a.get("front_url", ""),
             variant=split_name_variant(a.get("name_extra", ""))[1],
+            image_url=image_url,
         ))
         if len(products) >= limit:
             break

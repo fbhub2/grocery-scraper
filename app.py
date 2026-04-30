@@ -19,7 +19,9 @@ def load_liste() -> list[dict]:
     return db.get_list("default")
 
 
-def _item_display(name: str, volume: str | None) -> None:
+def _item_display(name: str, volume: str | None, image_url: str | None = None) -> None:
+    if image_url:
+        st.image(image_url, width=50)
     st.write(name.capitalize())
     if volume:
         st.caption(volume)
@@ -98,7 +100,7 @@ with st.sidebar:
         for idx, item in enumerate(handleliste_copy):
             c1, c2 = st.columns([5, 1])
             with c1:
-                _item_display(item["product_name"], item.get("volume"))
+                _item_display(item["product_name"], item.get("volume"), item.get("image_url"))
             if c2.button("✕", key=f"fjern_idx_{idx}", help=f"Fjern {item['product_name']}"):
                 db.remove_item("default", item["product_name"], item_id=item.get("id"))
                 st.session_state.handleliste = [
@@ -310,11 +312,14 @@ if st.session_state.search_results is not None:
                     variant = p.get("volume") if is_obs else p.get("variant")
                     url = p.get("url") if not is_obs else None
                     valid_to = p.get("valid_to") if is_obs else None
+                    image_url = p.get("image_url")
 
                     price_line = f"kr {price:.2f}"
                     if unit_price:
                         price_line += f"  _{unit_price}_"
 
+                    if image_url:
+                        st.image(image_url, width=80)
                     st.markdown(f"**{name}**")
                     if variant:
                         st.caption(variant)
@@ -340,6 +345,7 @@ if st.session_state.search_results is not None:
                                 "default", name,
                                 store=store, price=price,
                                 volume=variant, search_term=search_term,
+                                image_url=image_url,
                             )
                             st.session_state.handleliste = load_liste()
                             st.rerun()

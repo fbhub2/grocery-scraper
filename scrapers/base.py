@@ -36,6 +36,7 @@ class Product:
     unit_price: Optional[str] = None
     url: Optional[str] = None
     variant: Optional[str] = None
+    image_url: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
