@@ -4,25 +4,26 @@
 
 ---
 
-## Nå: Velg neste oppgave fra BACKLOG.md
+## Status: Alle planlagte features er levert
 
-Alle planlagte features er implementert:
-
-- [x] MCP-server
-- [x] SQLite-lagring + normalisering
-- [x] OBS-import
-- [x] Søkeresultater-tabell med filtre
-- [x] Volume-matching + enhetspris
-- [x] Produktbilder
-- [x] Prishistorikk + trendvisning
-- [x] Prisvarsel (in-app, ved søk alle på listen)
-
-**Backlog** har kun `Rema 1000` igjen som lav-prioritet oppgave (API ikke-funksjonelt).
-
-Mulige neste retninger:
-- Rema 1000 (vente til API er tilgjengelig)
-- Ny feature fra bruker
+| Feature | Branch | PR | Status |
+|---|---|---|---|
+| Grunnstruktur (scraper, CLI, Streamlit) | `main` | — | ✅ |
+| Handleliste + SQLite | `feature/db-search-term` | — | ✅ |
+| OBS tilbudsavis-import | `feature/obs-import` | — | ✅ |
+| MCP-server | `feature/mcp-server` | — | ✅ |
+| Søkresultater-tabell + filtre | `feature/ui-sokresultater-v2` | — | ✅ |
+| Volume-matching + enhetspris | `feature/ui-sokresultater-v2` | — | ✅ |
+| Produktbilder (Oda + Meny) | `feature/produktbilde` | #1 | ✅ |
+| Prishistorikk + trendvisning | `feature/prishistorikk` | #2 | ✅ |
+| Prisvarsel (in-app banner + sidebar) | `feature/prisvarsel` | #3 | ✅ |
 
 ---
 
-*Oppdater denne filen når du velger neste oppgave.*
+## Gjenstående i backlog
+
+- **Rema 1000** — lav prioritet, venter på at API blir funksjonelt igjen
+
+---
+
+*Oppdater denne filen når du velger neste oppgave fra BACKLOG.md.*

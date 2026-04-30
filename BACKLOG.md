@@ -24,34 +24,49 @@ Prioritert liste. Øverst = viktigst. Flytt fritt mellom seksjoner.
 
 ## ✅ Ferdig
 
-- [x] **MCP-server grunnstruktur** (`mcp_server.py`)
-  - `search_products`, `compare_prices`, `get_store_list`
-  - `add_to_list`, `add_multiple_to_list`, `get_list`, `import_obs_catalog`
-- [x] **SQLite-lagring** (`db.py`)
+- [x] **Grunnstruktur** — `first commit` · apr 2026
+  - Oda + Meny scraper via httpx, CLI (`main.py`), Streamlit (`app.py`)
+  - `Product`-dataclass med `split_name_variant()`
+
+- [x] **Handleliste + UI-forbedringer** — `feature/handleliste` · apr 2026
+  - SQLite handleliste, legg til/fjern varer, per-butikk kolonner i UI
+
+- [x] **SQLite-lagring** (`db.py`) — `feature/db-search-term` · apr 2026
   - Tabeller: `shopping_lists`, `list_items` (med `search_term`, `volume`), `obs_products`
-  - `remove_item(item_id=)` for presis sletting
-  - Auto-migrering for eksisterende databaser
-- [x] **Produktnavn-normalisering** (`normalize.py`)
+  - `remove_item(item_id=)` for presis sletting, auto-migrering
+
+- [x] **Produktnavn-normalisering** (`normalize.py`) — `feature/db-search-term` · apr 2026
   - `normalize_search_term()` – strippar volum-tokens for kryssbutikk-matching
   - `parse_product_name()` – strukturert ekstraksjon (brand, volum, enhet)
-- [x] **RapidFuzz fuzzy-søk**
-  - `rapidfuzz>=3.0` i requirements.txt
-  - Brukes i `mcp_server.py` for fuzzy-ranking av søkeresultater
-- [x] **OBS tilbudsavis-import**
+
+- [x] **OBS tilbudsavis-import** — `feature/obs-import` · apr 2026
   - Claude Vision parser PDF/bilde → `import_obs_catalog` MCP-tool lagrer i SQLite
   - Vises i søkeresultater og sidebar med gyldighetsperiode
-- [x] **Søkeresultater-tabell øverst med filtre**
+
+- [x] **MCP-server grunnstruktur** (`mcp_server.py`) — `feature/mcp-server` · apr 2026
+  - `search_products`, `compare_prices`, `get_store_list`
+  - `add_to_list`, `add_multiple_to_list`, `get_list`, `import_obs_catalog`
+  - `rapidfuzz>=3.0` for fuzzy-ranking
+
+- [x] **Søkeresultater-tabell øverst med filtre** — `feature/ui-sokresultater-v2` · apr 2026
   - Butikk-multiselect, sorteringsvalg
   - Radseleksjon → "Legg til valgte (N) på handlelisten"
-- [x] **Volume-matching i handlelistesøk**
+
+- [x] **Volume-matching i handlelistesøk** — `feature/ui-sokresultater-v2` · apr 2026
   - `_best_product()` velger beste volum-match
   - Enhetspris per butikk i handlelistetabell
-- [x] **Produktbilde i resultat**
-  - `image_url` fra Oda og Meny vises i søkeresultater og sidebar
-- [x] **Prishistorikk over tid**
+
+- [x] **Fix: prosent i produktnavn** (`split_name_variant`) — `fix/split-name-variant-percent` · apr 2026
+  - `0,5%` beholdes i produktnavn, flyttes ikke til variant-kolonne
+
+- [x] **Produktbilde i resultat** — PR #1 · `feature/produktbilde` · apr 2026
+  - `image_url` fra Oda (`thumbnail.url`) og Meny (`bilder.ngdata.no`) vises i søk og sidebar
+
+- [x] **Prishistorikk over tid** — PR #2 · `feature/prishistorikk` · apr 2026
   - `price_history`-tabell i SQLite, `record_price()`, `get_price_trend()`
-  - Trend-kolonne (↑↓→) i handlelistetabell
-- [x] **Varsling ved prisfall**
+  - Trend-kolonne (↑↓→) per butikk i handlelistetabell
+
+- [x] **Varsling ved prisfall** — PR #3 · `feature/prisvarsel` · apr 2026
   - `st.success()` banner per vare med prisfall etter «Søk alle på listen»
   - Badge per vare i sidebar når prisfall er registrert
 
