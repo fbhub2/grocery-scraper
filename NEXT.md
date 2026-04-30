@@ -20,8 +20,9 @@
 
 ---
 
-## Gjenstående i backlog
+## Gjenstående / uløst
 
+- **MCP Desktop-bug** — serveren virker isolert, men laster ikke i Claude Desktop. Se BACKLOG.md for full historikk og neste debug-steg.
 - **Rema 1000** — lav prioritet, venter på at API blir funksjonelt igjen
 
 ---

@@ -82,4 +82,9 @@ Prioritert liste. Øverst = viktigst. Flytt fritt mellom seksjoner.
 
 ## 🐛 Kjente bugs
 
-*(ingen registrert)*
+- [ ] **MCP grocery-scraper laster ikke i Claude Desktop** — mai 2026
+  - Serveren fungerer 100% isolert (full JSON-RPC handshake OK, alle 7 tools returneres)
+  - `homeassistant` MCP (identisk mønster, `"command": "python"`, C:\ClaudeMCP\) laster fint
+  - Forsøkt: sys.path-fix, full Python-sti, cwd, filnavn-rename, kopi til C:\ClaudeMCP\, rekkefølge i config
+  - Mistanke: Desktop Commander sin `allowedDirectories`/konflikthåndtering, eller Electron sandbox-problem spesifikt for dette prosjektet
+  - Neste: sjekk om Electron-prosessen for grocery-scraper faktisk startes (Task Manager), og om det finnes feillogg i `%LOCALAPPDATA%\Claude\`
