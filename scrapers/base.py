@@ -2,9 +2,10 @@ import re
 from dataclasses import dataclass, asdict
 from typing import Optional
 
-# Matcher størrelsestoken: vekt/volum (1,75 l · 540 g · 330ml) og prosent (0,5% · 1%)
+# Matcher størrelsestoken: vekt/volum (1,75 l · 540 g · 330ml).
+# Prosent (0,5%) regnes som del av produktnavnet (f.eks. fettinnhold) og matches ikke.
 _SIZE_RE = re.compile(
-    r'\b\d+[,.]?\d*\s*(?:g|kg|l|ml|dl|cl|stk)\b|\b\d+[,.]?\d*\s*%',
+    r'\b\d+[,.]?\d*\s*(?:g|kg|l|ml|dl|cl|stk)\b',
     re.IGNORECASE,
 )
 
@@ -23,7 +24,7 @@ def split_name_variant(full: str) -> tuple[str, str | None]:
         sizes.append(tok)
 
     name = _SIZE_RE.sub('', full)
-    name = re.sub(r'[,\s]+', ' ', name).strip()
+    name = re.sub(r'\s+', ' ', name).strip().strip(',').strip()
     variant = ' · '.join(sizes) if sizes else None
     return name, variant
 
