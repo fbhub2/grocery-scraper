@@ -125,7 +125,7 @@ with st.sidebar:
                     vare_label = vare.capitalize()
                     if preferred_volume:
                         vare_label += f" ({preferred_volume})"
-                    row: dict = {"Vare": vare_label}
+                    row: dict = {"Vare": vare_label, "_navn": vare}
                     for store_name in STORES:
                         prods = res.get(store_name, [])
                         best = _best_product(prods, preferred_volume)
@@ -137,6 +137,8 @@ with st.sidebar:
                             row[store_name] = price
                             row[f"{store_name} (enhet)"] = unit_price or ""
                             totals[store_name] += price
+                            db.record_price(vare, store_name, price,
+                                            unit_price=unit_price, volume=preferred_volume)
                         else:
                             row[store_name] = None
                             row[f"{store_name} (enhet)"] = ""
@@ -372,12 +374,22 @@ elif st.session_state.liste_resultater is not None:
             optimal_total += prices[best]
         else:
             best = "—"
-        rows_display.append({**row, "Billigst": best})
+        product_name = row.get("_navn", row["Vare"])
+        display_row = {k: v for k, v in row.items() if k != "_navn"}
+        for s in STORES:
+            trend = db.get_price_trend(product_name, s)
+            if trend:
+                symbol = "↑" if trend["delta"] > 0.01 else ("↓" if trend["delta"] < -0.01 else "→")
+                display_row[f"{s} trend"] = f"{symbol} {abs(trend['delta']):.2f} kr"
+            else:
+                display_row[f"{s} trend"] = ""
+        rows_display.append({**display_row, "Billigst": best})
 
     col_config: dict = {}
     for s in STORES:
         col_config[s] = st.column_config.NumberColumn(s, format="%.2f kr")
         col_config[f"{s} (enhet)"] = st.column_config.TextColumn(f"{s}/enhet")
+        col_config[f"{s} trend"] = st.column_config.TextColumn(f"{s} ↑↓")
 
     st.dataframe(
         pd.DataFrame(rows_display),

@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "grocery.db"
@@ -32,6 +32,15 @@ def _init() -> None:
                 added_at     TEXT DEFAULT (datetime('now')),
                 checked      INTEGER DEFAULT 0,
                 search_term  TEXT
+            );
+            CREATE TABLE IF NOT EXISTS price_history (
+                id           INTEGER PRIMARY KEY,
+                product_name TEXT NOT NULL,
+                store        TEXT NOT NULL,
+                price        REAL NOT NULL,
+                unit_price   TEXT,
+                volume       TEXT,
+                recorded_at  TEXT DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS obs_products (
                 id           INTEGER PRIMARY KEY,
@@ -131,6 +140,58 @@ def get_all_lists() -> list[str]:
             "SELECT name FROM shopping_lists ORDER BY created_at"
         ).fetchall()
     return [r["name"] for r in rows]
+
+
+def record_price(
+    product_name: str,
+    store: str,
+    price: float,
+    unit_price: str = None,
+    volume: str = None,
+) -> None:
+    with _conn() as conn:
+        conn.execute(
+            """INSERT INTO price_history (product_name, store, price, unit_price, volume)
+               VALUES (?, ?, ?, ?, ?)""",
+            (product_name, store, price, unit_price, volume),
+        )
+
+
+def get_price_history(product_name: str, store: str = None, days: int = 90) -> list[dict]:
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    with _conn() as conn:
+        if store:
+            rows = conn.execute(
+                """SELECT store, price, unit_price, recorded_at FROM price_history
+                   WHERE product_name = ? AND store = ? AND recorded_at >= ?
+                   ORDER BY recorded_at""",
+                (product_name, store, cutoff),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT store, price, unit_price, recorded_at FROM price_history
+                   WHERE product_name = ? AND recorded_at >= ?
+                   ORDER BY recorded_at""",
+                (product_name, cutoff),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_price_trend(product_name: str, store: str) -> dict | None:
+    """Returnerer {current, previous, delta, pct} eller None hvis < 2 datapunkter."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT price FROM price_history
+               WHERE product_name = ? AND store = ?
+               ORDER BY recorded_at DESC LIMIT 2""",
+            (product_name, store),
+        ).fetchall()
+    if len(rows) < 2:
+        return None
+    current, previous = rows[0]["price"], rows[1]["price"]
+    delta = current - previous
+    pct = (delta / previous * 100) if previous else 0
+    return {"current": current, "previous": previous, "delta": delta, "pct": pct}
 
 
 def add_obs_products(products: list[dict]) -> None:
