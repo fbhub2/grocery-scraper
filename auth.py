@@ -1,15 +1,16 @@
 import os
 import secrets
 from pathlib import Path
+from urllib.parse import urlencode
+import httpx
 import streamlit as st
 from dotenv import load_dotenv
-from authlib.integrations.httpx_client import OAuth2Client
 
 _DOTENV_PATH = Path(__file__).parent / ".env"
 
 _AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
-_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
 def _load_config() -> dict:
@@ -25,25 +26,40 @@ def get_auth_url() -> str:
     cfg = _load_config()
     state = secrets.token_urlsafe(16)
     st.session_state["oauth_state"] = state
-    client = OAuth2Client(client_id=cfg["client_id"], redirect_uri=cfg["redirect_uri"])
-    url, _ = client.create_authorization_url(
-        _AUTHORIZATION_URL,
-        scope="openid email profile",
-        state=state,
-    )
-    return url
+    params = {
+        "client_id": cfg["client_id"],
+        "redirect_uri": cfg["redirect_uri"],
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    return f"{_AUTHORIZATION_URL}?{urlencode(params)}"
 
 
 def exchange_code_for_user(code: str) -> dict:
     cfg = _load_config()
-    client = OAuth2Client(
-        client_id=cfg["client_id"],
-        client_secret=cfg["client_secret"],
-        redirect_uri=cfg["redirect_uri"],
-    )
-    client.fetch_token(_TOKEN_URL, code=code)
-    resp = client.get(_USERINFO_URL)
-    return resp.json()
+    with httpx.Client() as client:
+        token_resp = client.post(
+            _TOKEN_URL,
+            data={
+                "code": code,
+                "client_id": cfg["client_id"],
+                "client_secret": cfg["client_secret"],
+                "redirect_uri": cfg["redirect_uri"],
+                "grant_type": "authorization_code",
+            },
+        )
+        token_resp.raise_for_status()
+        access_token = token_resp.json()["access_token"]
+
+        user_resp = client.get(
+            _USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        user_resp.raise_for_status()
+        return user_resp.json()
 
 
 def get_current_user() -> dict | None:
@@ -53,9 +69,7 @@ def get_current_user() -> dict | None:
 def require_login() -> dict:
     """
     Kall øverst i app.py (etter st.set_page_config).
-    - Håndterer ?code= callback fra Google
-    - Viser login-knapp hvis ikke innlogget → st.stop()
-    - Returnerer bruker-dict hvis innlogget
+    Håndterer ?code= callback, viser login-knapp, returnerer bruker-dict.
     """
     params = st.query_params
 
@@ -73,20 +87,14 @@ def require_login() -> dict:
     if user:
         return user
 
-    from urllib.parse import urlparse, parse_qs
     cfg = _load_config()
     auth_url = get_auth_url()
-    parsed_params = parse_qs(urlparse(auth_url).query)
-    uri_in_request = parsed_params.get("redirect_uri", ["ikke funnet"])[0]
 
     st.title("🛒 Prissammenligning")
     st.info("Logg inn med Google for å bruke appen.")
     st.link_button("Logg inn med Google", auth_url)
-    with st.expander("🔍 Debug OAuth"):
-        st.write(f"**redirect_uri i .env:** `{repr(cfg['redirect_uri'])}`")
-        st.write(f"**redirect_uri sendt til Google:** `{repr(uri_in_request)}`")
-        st.write(f"**client_id brukt:** `{cfg['client_id']}`")
-        st.write("**Komplett authorization URL:**")
+    with st.expander("🔍 Debug"):
+        st.write(f"**client_id:** `{cfg['client_id']}`")
+        st.write(f"**redirect_uri:** `{repr(cfg['redirect_uri'])}`")
         st.code(auth_url)
-        st.caption("Kopier URLen og lim inn i nettleseren for å se hva Google mottar.")
     st.stop()
