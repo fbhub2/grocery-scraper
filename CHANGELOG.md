@@ -4,6 +4,13 @@
 
 Spec: GROCERY_SCRAPER_SPEC.md (2026-05-01)
 
+### feature/normalization (mai 2026)
+- `auto_normalize()`: lowercase, CamelCase-split, COMPOUND_SPLITS (8 norske sammensetninger), volum-norm (1000g→1kg, "liter"→"l")
+- `resolve_name()`: eneste UI-funksjon for produktnavn — prioritet custom > auto > original
+- `check_threshold()`: absolutt/relativ/sale terskellogikk
+- `tasks.py`: `run_auto_normalize()` (hopper over eksisterende auto_name), CLI-kjøring
+- 97 tester grønne
+
 ### feature/db-foundation (mai 2026)
 - Alle v2.0-tabeller: store, product, normal, user_normal, user, price_fetch,
   product_price_history, shopping_list, shopping_list_item, watchlist, search_history

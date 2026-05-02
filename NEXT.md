@@ -4,22 +4,22 @@
 
 ---
 
-## Nå: `feature/normalization` (STEG 2 av 10)
+## Nå: `feature/product-persistence` (STEG 3 av 10)
 
-**Branch:** `feature/normalization`
-**Mål:** `auto_normalize()`, `resolve_name()`, `check_threshold()` i normalize.py + `tasks.py`
+**Branch:** `feature/product-persistence`
+**Mål:** Scrapers lagrer produkter i DB etter søk. `fetch_price()` på oda.py og meny.py.
 
 ### Sjekkliste
-- [ ] Opprett branch `feature/normalization`
-- [ ] `normalize.py`: `auto_normalize()` med COMPOUND_SPLITS (lowercase, CamelCase, volum-normalisering)
-- [ ] `normalize.py`: `resolve_name()` — kaller `db.get_display_name()` (eneste UI-funksjon for produktnavn)
-- [ ] `normalize.py`: `check_threshold()` for varslings-logikk
-- [ ] `tasks.py` (grunnstruktur): `run_auto_normalize()`
-- [ ] Oppdater `tests/test_normalize.py` med tester fra spec seksjon 9
+- [ ] Opprett branch `feature/product-persistence`
+- [ ] `scrapers/oda.py`: kall `db.ensure_store("oda")` + `db.upsert_product()` + `db.upsert_normal()` for hvert søkeresultat
+- [ ] `scrapers/meny.py`: samme mønster
+- [ ] `scrapers/oda.py`: `fetch_price(product_id: str) -> float | None` (async, httpx)
+- [ ] `scrapers/meny.py`: samme
+- [ ] `tests/test_scrapers.py`: mock HTTP-svar (aldri kall ekte API)
 - [ ] `python -m pytest tests/ -v` → alt grønt
 - [ ] Merge til main
 
-### Etter det: `feature/product-persistence` (STEG 3)
+### Etter det: `feature/price-fetch-task` (STEG 4)
 Se BACKLOG.md for detaljer.
 
 ### Merk: `feature/google-auth` (STEG 5) er BLOKKERT
@@ -33,8 +33,8 @@ Se BACKLOG.md STEG 5 for instruksjoner.
 | Steg | Branch                      | Avhenger av | Status   |
 |------|-----------------------------|-------------|----------|
 | 1    | `feature/db-foundation`     | —           | ✅ Ferdig |
-| 2    | `feature/normalization`     | 1           | ⏳ Neste  |
-| 3    | `feature/product-persistence`| 1+2        | 📋 Plan   |
+| 2    | `feature/normalization`     | 1           | ✅ Ferdig |
+| 3    | `feature/product-persistence`| 1+2        | ⏳ Neste  |
 | 4    | `feature/price-fetch-task`  | 1+2+3       | 📋 Plan   |
 | 5    | `feature/google-auth`       | 1 + .env ⚠️ | 🔒 Blokkert |
 | 6    | `feature/per-user-isolation`| 5           | 🔒 Blokkert |

@@ -16,13 +16,12 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 
 ## 🔴 Aktiv (neste sprint — v2.0)
 
-### STEG 2 · `feature/normalization`
-- [ ] `normalize.py` — `auto_normalize()` med COMPOUND_SPLITS
-- [ ] `normalize.py` — `resolve_name()` (eneste funksjon UI kaller for produktnavn)
-- [ ] `normalize.py` — `check_threshold()` for varslings-logikk
-- [ ] `tasks.py` (grunnstruktur) — `run_auto_normalize()`
-- [ ] `tests/test_normalize.py` fra spec seksjon 9
-- [ ] Fikser ISSUE-01 og ISSUE-04 (duplikate produktnavn)
+### STEG 2 · `feature/normalization` ✅ mai 2026
+- [x] `normalize.py` — `auto_normalize()` med COMPOUND_SPLITS, CamelCase-split, volum-norm
+- [x] `normalize.py` — `resolve_name()` — eneste UI-funksjon for produktnavn
+- [x] `normalize.py` — `check_threshold()` — absolutt/relativ/sale
+- [x] `tasks.py` — `run_auto_normalize()`, `python tasks.py normalize`
+- [x] 26 nye tester, 97 totalt grønne
 
 ### STEG 3 · `feature/product-persistence`
 - [ ] Scrapers kobles til DB etter søk: `upsert_product()` per resultat
