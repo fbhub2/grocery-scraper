@@ -4,24 +4,22 @@
 
 ---
 
-## Nå: `feature/db-foundation` (STEG 1 av 10)
+## Nå: `feature/normalization` (STEG 2 av 10)
 
-**Branch:** `feature/db-foundation`
-**Mål:** Ny `db.py` med alle spec-tabeller. Behold eksisterende funksjoner.
+**Branch:** `feature/normalization`
+**Mål:** `auto_normalize()`, `resolve_name()`, `check_threshold()` i normalize.py + `tasks.py`
 
 ### Sjekkliste
-- [ ] Opprett branch `feature/db-foundation`
-- [ ] Legg til nye tabeller i `db.py` via `CREATE TABLE IF NOT EXISTS`:
-  - `store`, `product`, `normal`, `user_normal`, `user`
-  - `price_fetch`, `product_price_history`
-  - `shopping_list`, `shopping_list_item`, `watchlist`, `search_history`
-- [ ] Legg til nye funksjoner (ikke fjern gamle — MCP-server bruker dem)
-- [ ] Oppdater `tests/test_db.py` med tester fra spec seksjon 9
-- [ ] `python -m pytest tests/test_db.py -v` → alt grønt
-- [ ] Oppdater CHANGELOG.md
+- [ ] Opprett branch `feature/normalization`
+- [ ] `normalize.py`: `auto_normalize()` med COMPOUND_SPLITS (lowercase, CamelCase, volum-normalisering)
+- [ ] `normalize.py`: `resolve_name()` — kaller `db.get_display_name()` (eneste UI-funksjon for produktnavn)
+- [ ] `normalize.py`: `check_threshold()` for varslings-logikk
+- [ ] `tasks.py` (grunnstruktur): `run_auto_normalize()`
+- [ ] Oppdater `tests/test_normalize.py` med tester fra spec seksjon 9
+- [ ] `python -m pytest tests/ -v` → alt grønt
 - [ ] Merge til main
 
-### Etter det: `feature/normalization` (STEG 2)
+### Etter det: `feature/product-persistence` (STEG 3)
 Se BACKLOG.md for detaljer.
 
 ### Merk: `feature/google-auth` (STEG 5) er BLOKKERT
@@ -34,8 +32,8 @@ Se BACKLOG.md STEG 5 for instruksjoner.
 
 | Steg | Branch                      | Avhenger av | Status   |
 |------|-----------------------------|-------------|----------|
-| 1    | `feature/db-foundation`     | —           | ⏳ Neste  |
-| 2    | `feature/normalization`     | 1           | 📋 Plan   |
+| 1    | `feature/db-foundation`     | —           | ✅ Ferdig |
+| 2    | `feature/normalization`     | 1           | ⏳ Neste  |
 | 3    | `feature/product-persistence`| 1+2        | 📋 Plan   |
 | 4    | `feature/price-fetch-task`  | 1+2+3       | 📋 Plan   |
 | 5    | `feature/google-auth`       | 1 + .env ⚠️ | 🔒 Blokkert |

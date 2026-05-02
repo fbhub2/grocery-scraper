@@ -4,18 +4,17 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 
 ---
 
-## 🔴 Aktiv (neste sprint — v2.0)
+## ✅ Ferdig (v2.0 — pågående)
 
-### STEG 1 · `feature/db-foundation`
-- [ ] `db.py` — alle nye tabeller: `store`, `product`, `normal`, `user_normal`, `user`,
-  `price_fetch`, `product_price_history`, `shopping_list`, `shopping_list_item`,
-  `watchlist`, `search_history`
-- [ ] Behold eksisterende funksjoner og tabeller (brukes av MCP-server og app.py)
-- [ ] `ensure_store()`, `upsert_product()`, `get_products()`
-- [ ] `upsert_normal()`, `get_display_name()`, `list_normals()`
-- [ ] `ensure_user()`, `get_user_id()`
-- [ ] `save_price()`, `get_price_history_v2()`
-- [ ] Oppdater `tests/conftest.py` og `tests/test_db.py`
+### STEG 1 · `feature/db-foundation` ✅ mai 2026
+- [x] 11 nye tabeller i `db.py` (v2.0 schema)
+- [x] 30+ nye funksjoner: store, product, normal, user, price_history_v2, shopping_list, watchlist
+- [x] Alle v1.x-funksjoner beholdt (backward compat)
+- [x] 37 nye tester, 71 totalt grønne
+
+---
+
+## 🔴 Aktiv (neste sprint — v2.0)
 
 ### STEG 2 · `feature/normalization`
 - [ ] `normalize.py` — `auto_normalize()` med COMPOUND_SPLITS

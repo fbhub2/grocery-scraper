@@ -1,8 +1,14 @@
 # CHANGELOG
 
-## [Unreleased — v2.0 planlagt]
+## [Unreleased — v2.0 pågående]
 
 Spec: GROCERY_SCRAPER_SPEC.md (2026-05-01)
+
+### feature/db-foundation (mai 2026)
+- Alle v2.0-tabeller: store, product, normal, user_normal, user, price_fetch,
+  product_price_history, shopping_list, shopping_list_item, watchlist, search_history
+- 30+ nye db-funksjoner (v1.x beholdes for backward compat)
+- 37 nye tester — 71 totalt
 
 ---
 
