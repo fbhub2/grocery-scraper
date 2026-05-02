@@ -73,9 +73,18 @@ def require_login() -> dict:
     if user:
         return user
 
+    from urllib.parse import urlparse, parse_qs
     cfg = _load_config()
+    auth_url = get_auth_url()
+    parsed_params = parse_qs(urlparse(auth_url).query)
+    uri_in_request = parsed_params.get("redirect_uri", ["ikke funnet"])[0]
+
     st.title("🛒 Prissammenligning")
     st.info("Logg inn med Google for å bruke appen.")
-    st.link_button("Logg inn med Google", get_auth_url())
-    st.caption(f"Redirect URI: `{cfg['redirect_uri']}`")
+    st.link_button("Logg inn med Google", auth_url)
+    with st.expander("🔍 Debug OAuth"):
+        st.write(f"**redirect_uri i .env:** `{cfg['redirect_uri']}`")
+        st.write(f"**redirect_uri sendt til Google:** `{uri_in_request}`")
+        st.write(f"**Streamlit URL (sjekk adressefeltet ditt):** ?")
+        st.caption("Disse to verdiene MÅ matche nøyaktig det som er i Google Cloud Console.")
     st.stop()
