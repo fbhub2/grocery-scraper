@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from normalize import normalize_search_term, parse_product_name
+from normalize import normalize_search_term, parse_product_name, auto_normalize, check_threshold
 
 
 class TestNormalizeSearchTerm:
@@ -51,5 +51,82 @@ class TestParseProductName:
 
     def test_raw_bevares(self):
         raw = "Tine Lettmelk 1,5 l"
-        result = parse_product_name(raw)
-        assert result["raw"] == raw
+        assert parse_product_name(raw)["raw"] == raw
+
+
+class TestAutoNormalize:
+    def test_compound_split_lettmelk(self):
+        assert auto_normalize("lettmelk") == "lett melk"
+
+    def test_compound_split_helmelk(self):
+        assert auto_normalize("helmelk") == "hel melk"
+
+    def test_compound_split_uppercase(self):
+        assert auto_normalize("LETTMELK") == "lett melk"
+
+    def test_compound_split_havregryn(self):
+        assert auto_normalize("havregryn") == "havre gryn"
+
+    def test_compound_split_knekkebrød(self):
+        assert auto_normalize("knekkebrød") == "knekke brød"
+
+    def test_volum_stor_L(self):
+        assert auto_normalize("Tine 1L") == "tine 1l"
+
+    def test_volum_liter_tekst(self):
+        assert auto_normalize("Tine 1 liter") == "tine 1l"
+
+    def test_volum_1000g_til_kg(self):
+        assert auto_normalize("Tine 1000g") == "tine 1kg"
+
+    def test_volum_500g_beholdes(self):
+        assert auto_normalize("Havre 500g") == "havre 500g"
+
+    def test_camelcase_split(self):
+        result = auto_normalize("TineLettmelk")
+        assert "tine" in result
+        assert "lett" in result
+        assert "melk" in result
+
+    def test_lowercase(self):
+        assert auto_normalize("SMØR") == "smør"
+
+    def test_ingen_endring_ved_normalt_navn(self):
+        assert auto_normalize("smør") == "smør"
+
+    def test_compound_i_lengre_navn(self):
+        result = auto_normalize("Tine lettmelk 1L")
+        assert result == "tine lett melk 1l"
+
+    def test_volum_med_mellomrom(self):
+        assert auto_normalize("Q melk 1,5 l") == "q melk 1,5l"
+
+
+class TestCheckThreshold:
+    def test_absolutt_under(self):
+        item = {"threshold_type": "absolute", "threshold_value": 20.0}
+        assert check_threshold(item, 19.90, 25.0) is True
+
+    def test_absolutt_over(self):
+        item = {"threshold_type": "absolute", "threshold_value": 20.0}
+        assert check_threshold(item, 20.10, 25.0) is False
+
+    def test_sale_truffet(self):
+        item = {"threshold_type": "sale", "threshold_value": None}
+        assert check_threshold(item, 20.0, 25.0) is True   # 80% av snitt
+
+    def test_sale_ikke_truffet(self):
+        item = {"threshold_type": "sale", "threshold_value": None}
+        assert check_threshold(item, 23.0, 25.0) is False  # 92% av snitt
+
+    def test_relativ_truffet(self):
+        item = {"threshold_type": "relative", "threshold_value": 15.0}
+        assert check_threshold(item, 21.0, 25.0) is True   # 16% under snitt
+
+    def test_relativ_ikke_truffet(self):
+        item = {"threshold_type": "relative", "threshold_value": 15.0}
+        assert check_threshold(item, 22.0, 25.0) is False  # 12% under snitt
+
+    def test_ukjent_type_returnerer_false(self):
+        item = {"threshold_type": "ukjent", "threshold_value": None}
+        assert check_threshold(item, 10.0, 25.0) is False
