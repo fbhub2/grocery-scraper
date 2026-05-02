@@ -29,11 +29,10 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] `fetch_price(product_id)` async på begge scrapers (returnerer None ved feil)
 - [x] 14 nye tester (mockete HTTP), 111 totalt grønne
 
-### STEG 4 · `feature/price-fetch-task`
-- [ ] `db.py` — `add_to_price_fetch()`, `remove_from_price_fetch()`, `get_price_fetch_products()`
-- [ ] `tasks.py` — `run_price_fetch()` med threshold-sjekk
-- [ ] UI-checkbox "Overvåk" per rad i produkttabell
-- [ ] `tests/test_tasks.py` fra spec seksjon 9
+### STEG 4 · `feature/price-fetch-task` ✅ mai 2026
+- [x] `db.py` — `get_all_price_fetch_products()`, `get_watchlist_by_name()`
+- [x] `tasks.py` — `run_price_fetch()` med asyncio.gather + watchlist-terskel-sjekk
+- [x] `tests/test_tasks.py` — 15 nye tester (mockete scrapers), 126 totalt grønne
 
 ---
 

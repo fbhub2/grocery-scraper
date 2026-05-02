@@ -2,6 +2,11 @@
 
 ## [Unreleased — v2.0 pågående]
 
+### feature/price-fetch-task (mai 2026)
+- `db.py`: `get_all_price_fetch_products()` (unike produkter på tvers av brukere), `get_watchlist_by_name()` (kun status=waiting)
+- `tasks.py`: `run_price_fetch()` — parallell henting via `asyncio.gather`, lagrer i `product_price_history`, sjekker absolutt/relativ/sale-terskler
+- `tests/test_tasks.py`: 15 nye tester med mockete scrapers (AsyncMock), 126 totalt grønne
+
 Spec: GROCERY_SCRAPER_SPEC.md (2026-05-01)
 
 ### feature/product-persistence (mai 2026)

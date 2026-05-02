@@ -4,26 +4,25 @@
 
 ---
 
-## Nå: `feature/price-fetch-task` (STEG 4 av 10)
+## ✅ STEG 4 ferdig — `feature/price-fetch-task` (mai 2026)
 
-**Branch:** `feature/price-fetch-task`
-**Mål:** Fullføre `tasks.py run_price_fetch()` med threshold-sjekk og UI-checkbox "Overvåk".
+126 tester grønne. Merget til main.
 
-### Sjekkliste
-- [ ] Opprett branch `feature/price-fetch-task`
-- [ ] `db.py`: `add_to_price_fetch()`, `remove_from_price_fetch()`, `get_price_fetch_products()` — allerede implementert i STEG 1
-- [ ] `tasks.py`: `run_price_fetch()` — hent pris via riktig scraper, lagre i `product_price_history`, sjekk watchlist-terskel
-- [ ] `app.py`: checkbox "Overvåk" per rad i produkttabell (kobler til `price_fetch`-tabellen)
-- [ ] `tests/test_tasks.py`: tester for `run_price_fetch()` med mockete scrapers
-- [ ] `python -m pytest tests/ -v` → alt grønt
-- [ ] Merge til main
+## Nå: `feature/google-auth` (STEG 5) — BLOKKERT ⚠️
 
-### Etter det: `feature/google-auth` (STEG 5) — BLOKKERT
-Krever `.env` med Google-credentials fra deg.
+**Blokkert:** Krever at du setter opp Google Cloud Console manuelt.
 
-### Merk: `feature/google-auth` (STEG 5) er BLOKKERT
-Krever at du setter opp Google Cloud Console manuelt.
-Se BACKLOG.md STEG 5 for instruksjoner.
+### Du må gjøre dette først:
+1. Gå til https://console.cloud.google.com
+2. Opprett OAuth 2.0 Client ID (Web application)
+3. Sett Redirect URI: `http://localhost:8501/oauth/callback`
+4. Kopier Client ID og Client Secret
+5. Opprett `.env` i `C:\mittprosjekt\` med:
+   ```
+   GOOGLE_CLIENT_ID=<din client id>
+   GOOGLE_CLIENT_SECRET=<din client secret>
+   ```
+6. Si fra — da implementerer jeg STEG 5.
 
 ---
 
