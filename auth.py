@@ -4,21 +4,25 @@ import streamlit as st
 from dotenv import load_dotenv
 from authlib.integrations.httpx_client import OAuth2Client
 
-load_dotenv()
-
-_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8501/oauth/callback")
-
 _AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 
+def _load_config() -> dict:
+    load_dotenv(override=True)
+    return {
+        "client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
+        "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""),
+        "redirect_uri": os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8501/"),
+    }
+
+
 def get_auth_url() -> str:
+    cfg = _load_config()
     state = secrets.token_urlsafe(16)
     st.session_state["oauth_state"] = state
-    client = OAuth2Client(client_id=_CLIENT_ID, redirect_uri=_REDIRECT_URI)
+    client = OAuth2Client(client_id=cfg["client_id"], redirect_uri=cfg["redirect_uri"])
     url, _ = client.create_authorization_url(
         _AUTHORIZATION_URL,
         scope="openid email profile",
@@ -28,10 +32,11 @@ def get_auth_url() -> str:
 
 
 def exchange_code_for_user(code: str) -> dict:
+    cfg = _load_config()
     client = OAuth2Client(
-        client_id=_CLIENT_ID,
-        client_secret=_CLIENT_SECRET,
-        redirect_uri=_REDIRECT_URI,
+        client_id=cfg["client_id"],
+        client_secret=cfg["client_secret"],
+        redirect_uri=cfg["redirect_uri"],
     )
     client.fetch_token(_TOKEN_URL, code=code)
     resp = client.get(_USERINFO_URL)
@@ -65,7 +70,9 @@ def require_login() -> dict:
     if user:
         return user
 
+    cfg = _load_config()
     st.title("🛒 Prissammenligning")
     st.info("Logg inn med Google for å bruke appen.")
     st.link_button("Logg inn med Google", get_auth_url())
+    st.caption(f"Redirect URI: `{cfg['redirect_uri']}`")
     st.stop()
