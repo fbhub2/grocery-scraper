@@ -8,11 +8,13 @@ DB_PATH = Path(__file__).parent / "grocery.db"
 def _conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
 def _init() -> None:
     with _conn() as conn:
+        # --- v1.x tabeller (beholdes for MCP-server og app.py) ---
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS shopping_lists (
                 id         INTEGER PRIMARY KEY,
@@ -43,32 +45,112 @@ def _init() -> None:
                 recorded_at  TEXT DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS obs_products (
-                id           INTEGER PRIMARY KEY,
-                product_name TEXT,
-                brand        TEXT,
-                volume       TEXT,
-                price        REAL,
-                normal_price REAL,
-                valid_from   TEXT,
-                valid_to     TEXT,
-                source       TEXT,
-                image_url    TEXT,
-                valid_week   TEXT,
-                imported_at  TEXT DEFAULT (datetime('now')),
+                id               INTEGER PRIMARY KEY,
+                product_name     TEXT,
+                brand            TEXT,
+                volume           TEXT,
+                price            REAL,
+                normal_price     REAL,
+                valid_from       TEXT,
+                valid_to         TEXT,
+                source           TEXT,
+                image_url        TEXT,
+                valid_week       TEXT,
+                imported_at      TEXT DEFAULT (datetime('now')),
                 valid_updated_at TEXT DEFAULT (datetime('now'))
+            );
+
+            -- v2.0 tabeller ---
+            CREATE TABLE IF NOT EXISTS store (
+                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+            );
+            CREATE TABLE IF NOT EXISTS product (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id    TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                store_id      INTEGER NOT NULL REFERENCES store(id),
+                UNIQUE(product_id, store_id)
+            );
+            CREATE TABLE IF NOT EXISTS normal (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_name TEXT NOT NULL,
+                auto_name     TEXT,
+                UNIQUE(original_name)
+            );
+            CREATE TABLE IF NOT EXISTS user (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                google_sub TEXT NOT NULL UNIQUE,
+                email      TEXT NOT NULL,
+                name       TEXT,
+                created_at TEXT DEFAULT (date('now'))
+            );
+            CREATE TABLE IF NOT EXISTS user_normal (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL REFERENCES user(id),
+                normal_id   INTEGER NOT NULL REFERENCES normal(id),
+                custom_name TEXT NOT NULL,
+                UNIQUE(user_id, normal_id)
+            );
+            CREATE TABLE IF NOT EXISTS product_price_history (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL REFERENCES product(id),
+                store_id   INTEGER NOT NULL REFERENCES store(id),
+                date       TEXT NOT NULL,
+                price      REAL NOT NULL,
+                UNIQUE(product_id, store_id, date)
+            );
+            CREATE TABLE IF NOT EXISTS price_fetch (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL REFERENCES user(id),
+                product_id INTEGER NOT NULL REFERENCES product(id),
+                UNIQUE(user_id, product_id)
+            );
+            CREATE TABLE IF NOT EXISTS shopping_list (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL REFERENCES user(id),
+                name       TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                archived   INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS shopping_list_item (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_id       INTEGER NOT NULL REFERENCES shopping_list(id),
+                original_name TEXT NOT NULL,
+                quantity      INTEGER DEFAULT 1,
+                note          TEXT,
+                checked       INTEGER DEFAULT 0,
+                added_at      TEXT DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS watchlist (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL REFERENCES user(id),
+                original_name   TEXT NOT NULL,
+                threshold_type  TEXT NOT NULL,
+                threshold_value REAL,
+                status          TEXT DEFAULT 'waiting',
+                triggered_at    TEXT,
+                triggered_price REAL,
+                triggered_store TEXT,
+                created_at      TEXT DEFAULT (datetime('now')),
+                UNIQUE(user_id, original_name)
+            );
+            CREATE TABLE IF NOT EXISTS search_history (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL REFERENCES user(id),
+                query       TEXT NOT NULL,
+                searched_at TEXT DEFAULT (datetime('now'))
             );
         """)
 
-        # Migration: legg til kolonner hvis de ikke finnes
+        # v1.x migrasjoner
         cursor = conn.cursor()
-
         cursor.execute("PRAGMA table_info(obs_products)")
         obs_cols = {row[1] for row in cursor.fetchall()}
         if "valid_week" not in obs_cols:
             conn.execute("ALTER TABLE obs_products ADD COLUMN valid_week TEXT")
         if "valid_updated_at" not in obs_cols:
             conn.execute("ALTER TABLE obs_products ADD COLUMN valid_updated_at TEXT DEFAULT (datetime('now'))")
-
         cursor.execute("PRAGMA table_info(list_items)")
         item_cols = {row[1] for row in cursor.fetchall()}
         if "search_term" not in item_cols:
@@ -78,12 +160,20 @@ def _init() -> None:
 _init()
 
 
+# ---------------------------------------------------------------------------
+# Intern hjelper
+# ---------------------------------------------------------------------------
+
 def _ensure_list(conn: sqlite3.Connection, list_name: str) -> int:
     conn.execute("INSERT OR IGNORE INTO shopping_lists (name) VALUES (?)", (list_name,))
     return conn.execute(
         "SELECT id FROM shopping_lists WHERE name = ?", (list_name,)
     ).fetchone()["id"]
 
+
+# ---------------------------------------------------------------------------
+# v1.x — handleliste (bevares for MCP-server og app.py)
+# ---------------------------------------------------------------------------
 
 def add_item(
     list_name: str,
@@ -118,7 +208,6 @@ def get_list(list_name: str = "default") -> list[dict]:
 
 
 def remove_item(list_name: str, product_name: str, item_id: int = None) -> None:
-    """Fjern en vare fra handlelisten. Bruk item_id for presis sletting hvis tilgjengelig."""
     with _conn() as conn:
         if item_id is not None:
             conn.execute(
@@ -141,6 +230,10 @@ def get_all_lists() -> list[str]:
         ).fetchall()
     return [r["name"] for r in rows]
 
+
+# ---------------------------------------------------------------------------
+# v1.x — prishistorikk (bevares for MCP-server og app.py)
+# ---------------------------------------------------------------------------
 
 def record_price(
     product_name: str,
@@ -178,7 +271,6 @@ def get_price_history(product_name: str, store: str = None, days: int = 90) -> l
 
 
 def get_price_trend(product_name: str, store: str) -> dict | None:
-    """Returnerer {current, previous, delta, pct} eller None hvis < 2 datapunkter."""
     with _conn() as conn:
         rows = conn.execute(
             """SELECT price FROM price_history
@@ -194,6 +286,10 @@ def get_price_trend(product_name: str, store: str) -> dict | None:
     return {"current": current, "previous": previous, "delta": delta, "pct": pct}
 
 
+# ---------------------------------------------------------------------------
+# v1.x — OBS-produkter (bevares for MCP-server og app.py)
+# ---------------------------------------------------------------------------
+
 def add_obs_products(products: list[dict]) -> None:
     with _conn() as conn:
         conn.executemany(
@@ -203,15 +299,9 @@ def add_obs_products(products: list[dict]) -> None:
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
             [
                 (
-                    p.get("product_name"),
-                    p.get("brand"),
-                    p.get("volume"),
-                    p.get("price"),
-                    p.get("normal_price"),
-                    p.get("valid_from"),
-                    p.get("valid_to"),
-                    p.get("source"),
-                    p.get("image_url"),
+                    p.get("product_name"), p.get("brand"), p.get("volume"),
+                    p.get("price"), p.get("normal_price"), p.get("valid_from"),
+                    p.get("valid_to"), p.get("source"), p.get("image_url"),
                     p.get("valid_week"),
                 )
                 for p in products
@@ -234,46 +324,374 @@ def search_obs(query: str) -> list[dict]:
 def get_obs_status() -> dict:
     today = date.today().isoformat()
     with _conn() as conn:
-        rows = conn.execute(
-            """SELECT DISTINCT valid_from, valid_to, valid_week
-               FROM obs_products ORDER BY valid_to DESC LIMIT 1"""
+        row = conn.execute(
+            "SELECT DISTINCT valid_from, valid_to, valid_week FROM obs_products ORDER BY valid_to DESC LIMIT 1"
         ).fetchone()
-
-        if not rows:
-            return {
-                "has_data": False,
-                "total_products": 0,
-                "valid_from": None,
-                "valid_to": None,
-                "valid_week": None,
-                "is_expired": True,
-            }
-
-        valid_from = rows["valid_from"]
-        valid_to = rows["valid_to"]
-        valid_week = rows["valid_week"]
-        is_expired = valid_to < today if valid_to else True
-
-        count_active = conn.execute(
-            """SELECT COUNT(*) as cnt FROM obs_products WHERE valid_to >= ?""",
-            (today,),
+        if not row:
+            return {"has_data": False, "total_products": 0, "valid_from": None,
+                    "valid_to": None, "valid_week": None, "is_expired": True}
+        count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM obs_products WHERE valid_to >= ?", (today,)
         ).fetchone()["cnt"]
-
-        return {
-            "has_data": True,
-            "total_products": count_active,
-            "valid_from": valid_from,
-            "valid_to": valid_to,
-            "valid_week": valid_week,
-            "is_expired": is_expired,
-        }
+    return {
+        "has_data": True, "total_products": count,
+        "valid_from": row["valid_from"], "valid_to": row["valid_to"],
+        "valid_week": row["valid_week"],
+        "is_expired": (row["valid_to"] < today) if row["valid_to"] else True,
+    }
 
 
 def clear_expired_obs() -> int:
     today = date.today().isoformat()
     with _conn() as conn:
-        cursor = conn.execute(
-            """DELETE FROM obs_products WHERE valid_to < ?""",
-            (today,),
-        )
+        cursor = conn.execute("DELETE FROM obs_products WHERE valid_to < ?", (today,))
         return cursor.rowcount
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — butikker og produktkatalog
+# ---------------------------------------------------------------------------
+
+def ensure_store(name: str) -> int:
+    with _conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO store (name) VALUES (?)", (name,))
+        return conn.execute("SELECT id FROM store WHERE name = ?", (name,)).fetchone()["id"]
+
+
+def upsert_product(product_id: str, original_name: str, store_id: int) -> int:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO product (product_id, original_name, store_id) VALUES (?, ?, ?)",
+            (product_id, original_name, store_id),
+        )
+        return conn.execute(
+            "SELECT id FROM product WHERE product_id = ? AND store_id = ?",
+            (product_id, store_id),
+        ).fetchone()["id"]
+
+
+def get_products(store_id: int = None) -> list[dict]:
+    with _conn() as conn:
+        if store_id:
+            rows = conn.execute(
+                "SELECT p.*, s.name as store_name FROM product p JOIN store s ON p.store_id = s.id WHERE p.store_id = ?",
+                (store_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT p.*, s.name as store_name FROM product p JOIN store s ON p.store_id = s.id"
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — normalisering
+# ---------------------------------------------------------------------------
+
+def upsert_normal(original_name: str, auto_name: str = None) -> int:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO normal (original_name, auto_name) VALUES (?, ?)",
+            (original_name, auto_name),
+        )
+        if auto_name is not None:
+            conn.execute(
+                "UPDATE normal SET auto_name = ? WHERE original_name = ? AND auto_name IS NULL",
+                (auto_name, original_name),
+            )
+        return conn.execute(
+            "SELECT id FROM normal WHERE original_name = ?", (original_name,)
+        ).fetchone()["id"]
+
+
+def get_normal_id(original_name: str) -> int | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM normal WHERE original_name = ?", (original_name,)
+        ).fetchone()
+    return row["id"] if row else None
+
+
+def get_display_name(original_name: str, user_id: int = None) -> str:
+    with _conn() as conn:
+        if user_id is not None:
+            row = conn.execute(
+                """SELECT un.custom_name FROM user_normal un
+                   JOIN normal n ON un.normal_id = n.id
+                   WHERE n.original_name = ? AND un.user_id = ?""",
+                (original_name, user_id),
+            ).fetchone()
+            if row:
+                return row["custom_name"]
+        row = conn.execute(
+            "SELECT auto_name FROM normal WHERE original_name = ?", (original_name,)
+        ).fetchone()
+        if row and row["auto_name"]:
+            return row["auto_name"]
+    return original_name
+
+
+def list_normals(filter: str = None) -> list[dict]:
+    with _conn() as conn:
+        if filter:
+            rows = conn.execute(
+                "SELECT * FROM normal WHERE original_name LIKE ? ORDER BY original_name",
+                (f"%{filter}%",),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM normal ORDER BY original_name").fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_custom_name(original_name: str, custom_name: str, user_id: int) -> None:
+    normal_id = get_normal_id(original_name)
+    if normal_id is None:
+        normal_id = upsert_normal(original_name)
+    set_custom_name_by_id(normal_id, custom_name, user_id)
+
+
+def set_custom_name_by_id(normal_id: int, custom_name: str, user_id: int) -> None:
+    with _conn() as conn:
+        if custom_name:
+            conn.execute(
+                """INSERT INTO user_normal (user_id, normal_id, custom_name)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(user_id, normal_id) DO UPDATE SET custom_name = excluded.custom_name""",
+                (user_id, normal_id, custom_name),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM user_normal WHERE user_id = ? AND normal_id = ?",
+                (user_id, normal_id),
+            )
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — brukere
+# ---------------------------------------------------------------------------
+
+def ensure_user(google_sub: str, email: str, name: str) -> int:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO user (google_sub, email, name) VALUES (?, ?, ?)",
+            (google_sub, email, name),
+        )
+        return conn.execute(
+            "SELECT id FROM user WHERE google_sub = ?", (google_sub,)
+        ).fetchone()["id"]
+
+
+def get_user_id(google_sub: str) -> int | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM user WHERE google_sub = ?", (google_sub,)
+        ).fetchone()
+    return row["id"] if row else None
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — prishistorikk (product_price_history, global)
+# ---------------------------------------------------------------------------
+
+def save_price(product_id: int, store_id: int, price_date: str, price: float) -> None:
+    with _conn() as conn:
+        conn.execute(
+            """INSERT OR IGNORE INTO product_price_history (product_id, store_id, date, price)
+               VALUES (?, ?, ?, ?)""",
+            (product_id, store_id, price_date, price),
+        )
+
+
+def get_price_history_v2(product_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT pph.date, pph.price, s.name as store
+               FROM product_price_history pph
+               JOIN store s ON pph.store_id = s.id
+               WHERE pph.product_id = ?
+               ORDER BY pph.date""",
+            (product_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_avg_price(product_id: int, store_id: int, days: int = 30) -> float | None:
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    with _conn() as conn:
+        row = conn.execute(
+            """SELECT AVG(price) as avg FROM product_price_history
+               WHERE product_id = ? AND store_id = ? AND date >= ?""",
+            (product_id, store_id, cutoff),
+        ).fetchone()
+    return row["avg"] if row and row["avg"] is not None else None
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — price_fetch (prisovervåkning per bruker)
+# ---------------------------------------------------------------------------
+
+def add_to_price_fetch(product_id: int, user_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO price_fetch (user_id, product_id) VALUES (?, ?)",
+            (user_id, product_id),
+        )
+
+
+def remove_from_price_fetch(product_id: int, user_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM price_fetch WHERE user_id = ? AND product_id = ?",
+            (user_id, product_id),
+        )
+
+
+def get_price_fetch_products(user_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT p.*, s.name as store_name FROM price_fetch pf
+               JOIN product p ON pf.product_id = p.id
+               JOIN store s ON p.store_id = s.id
+               WHERE pf.user_id = ?""",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — handleliste (shopping_list, per bruker)
+# ---------------------------------------------------------------------------
+
+def create_shopping_list(user_id: int, name: str) -> int:
+    with _conn() as conn:
+        cursor = conn.execute(
+            "INSERT INTO shopping_list (user_id, name) VALUES (?, ?)", (user_id, name)
+        )
+        return cursor.lastrowid
+
+
+def get_shopping_lists(user_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT sl.*, COUNT(sli.id) as item_count
+               FROM shopping_list sl
+               LEFT JOIN shopping_list_item sli ON sl.id = sli.list_id
+               WHERE sl.user_id = ? AND sl.archived = 0
+               GROUP BY sl.id ORDER BY sl.created_at DESC""",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_shopping_list_items(list_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM shopping_list_item WHERE list_id = ? ORDER BY added_at",
+            (list_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_to_shopping_list(
+    list_id: int, original_name: str, quantity: int = 1, note: str = None
+) -> int:
+    with _conn() as conn:
+        cursor = conn.execute(
+            """INSERT INTO shopping_list_item (list_id, original_name, quantity, note)
+               VALUES (?, ?, ?, ?)""",
+            (list_id, original_name, quantity, note),
+        )
+        return cursor.lastrowid
+
+
+def toggle_item_checked(item_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE shopping_list_item SET checked = NOT checked WHERE id = ?", (item_id,)
+        )
+
+
+def delete_shopping_list(list_id: int) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM shopping_list_item WHERE list_id = ?", (list_id,))
+        conn.execute("DELETE FROM shopping_list WHERE id = ?", (list_id,))
+
+
+def archive_shopping_list(list_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE shopping_list SET archived = 1 WHERE id = ?", (list_id,)
+        )
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — varslingsliste (watchlist, per bruker)
+# ---------------------------------------------------------------------------
+
+def add_to_watchlist(
+    user_id: int,
+    original_name: str,
+    threshold_type: str,
+    threshold_value: float = None,
+) -> int:
+    with _conn() as conn:
+        cursor = conn.execute(
+            """INSERT INTO watchlist (user_id, original_name, threshold_type, threshold_value)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(user_id, original_name) DO UPDATE SET
+                 threshold_type = excluded.threshold_type,
+                 threshold_value = excluded.threshold_value,
+                 status = 'waiting'""",
+            (user_id, original_name, threshold_type, threshold_value),
+        )
+        return cursor.lastrowid
+
+
+def remove_from_watchlist(user_id: int, original_name: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM watchlist WHERE user_id = ? AND original_name = ?",
+            (user_id, original_name),
+        )
+
+
+def get_watchlist(user_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM watchlist WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_all_watchlist_items() -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute("SELECT * FROM watchlist WHERE status = 'waiting'").fetchall()
+    return [dict(r) for r in rows]
+
+
+def mark_watchlist_triggered(watchlist_id: int, price: float, store: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            """UPDATE watchlist SET status = 'triggered', triggered_at = datetime('now'),
+               triggered_price = ?, triggered_store = ? WHERE id = ?""",
+            (price, store, watchlist_id),
+        )
+
+
+def reset_watchlist_item(watchlist_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "UPDATE watchlist SET status = 'waiting', triggered_at = NULL, "
+            "triggered_price = NULL, triggered_store = NULL WHERE id = ?",
+            (watchlist_id,),
+        )
+
+
+def is_on_watchlist(user_id: int, original_name: str) -> bool:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM watchlist WHERE user_id = ? AND original_name = ?",
+            (user_id, original_name),
+        ).fetchone()
+    return row is not None
