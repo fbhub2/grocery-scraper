@@ -141,6 +141,11 @@ def _init() -> None:
                 query       TEXT NOT NULL,
                 searched_at TEXT DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS session (
+                token      TEXT PRIMARY KEY,
+                user_json  TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
         """)
 
         # v1.x migrasjoner
@@ -718,3 +723,30 @@ def is_on_watchlist(user_id: int, original_name: str) -> bool:
             (user_id, original_name),
         ).fetchone()
     return row is not None
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — sessions (persistent innlogging på tvers av F5)
+# ---------------------------------------------------------------------------
+
+def create_session(token: str, user: dict) -> None:
+    import json
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO session (token, user_json) VALUES (?, ?)",
+            (token, json.dumps(user)),
+        )
+
+
+def get_session_user(token: str) -> dict | None:
+    import json
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT user_json FROM session WHERE token = ?", (token,)
+        ).fetchone()
+    return json.loads(row["user_json"]) if row else None
+
+
+def delete_session(token: str) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM session WHERE token = ?", (token,))

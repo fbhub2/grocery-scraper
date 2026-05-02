@@ -5,3 +5,4 @@ resultater.json
 handleliste.json
 grocery.db
 .env
+.streamlit/secrets.toml

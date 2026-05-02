@@ -38,16 +38,13 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 
 ## 🟡 Planlagt (v2.1 — krever manuell Google Cloud-setup av bruker)
 
-### STEG 5 · `feature/google-auth` ⚠️ BLOKKERT
-- [ ] **MANUELL FORUTSETNING:** Google Cloud Console → OAuth 2.0 Client ID
-  - Redirect URI: `http://localhost:8501/oauth/callback`
-  - Legg Client ID + Secret i `.env`
-- [ ] `.env` + `.gitignore` (aldri commit .env)
-- [ ] `requirements.txt` — legg til `authlib>=1.3`, `python-dotenv>=1.0`
-- [ ] `auth.py` — `get_auth_url()`, `exchange_code_for_user()`, `require_login()`
-- [ ] `db.py` — `ensure_user()`, `get_user_id()`
-- [ ] `main.py` — `require_login()` øverst + sidebar med brukerinfo
-- [ ] `tests/test_auth.py` fra spec seksjon 9
+### STEG 5 · `feature/google-auth` ✅ mai 2026
+- [x] `.env` med GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
+- [x] `requirements.txt` — authlib>=1.3, python-dotenv>=1.0
+- [x] `auth.py` — `get_auth_url()`, `exchange_code_for_user()`, `require_login()`
+- [x] `app.py` — `require_login()` øverst + brukerinfo i sidebar
+- [x] `tests/test_auth.py` — 3 tester, 129 totalt grønne
+- Branch pushet til GitHub (ikke merget til main — krever manuell test)
 
 ### STEG 6 · `feature/per-user-isolation`
 - [ ] `db.py` — `user_normal`-tabell, `set_custom_name()`
