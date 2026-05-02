@@ -4,23 +4,22 @@
 
 ---
 
-## Nå: `feature/product-persistence` (STEG 3 av 10)
+## Nå: `feature/price-fetch-task` (STEG 4 av 10)
 
-**Branch:** `feature/product-persistence`
-**Mål:** Scrapers lagrer produkter i DB etter søk. `fetch_price()` på oda.py og meny.py.
+**Branch:** `feature/price-fetch-task`
+**Mål:** Fullføre `tasks.py run_price_fetch()` med threshold-sjekk og UI-checkbox "Overvåk".
 
 ### Sjekkliste
-- [ ] Opprett branch `feature/product-persistence`
-- [ ] `scrapers/oda.py`: kall `db.ensure_store("oda")` + `db.upsert_product()` + `db.upsert_normal()` for hvert søkeresultat
-- [ ] `scrapers/meny.py`: samme mønster
-- [ ] `scrapers/oda.py`: `fetch_price(product_id: str) -> float | None` (async, httpx)
-- [ ] `scrapers/meny.py`: samme
-- [ ] `tests/test_scrapers.py`: mock HTTP-svar (aldri kall ekte API)
+- [ ] Opprett branch `feature/price-fetch-task`
+- [ ] `db.py`: `add_to_price_fetch()`, `remove_from_price_fetch()`, `get_price_fetch_products()` — allerede implementert i STEG 1
+- [ ] `tasks.py`: `run_price_fetch()` — hent pris via riktig scraper, lagre i `product_price_history`, sjekk watchlist-terskel
+- [ ] `app.py`: checkbox "Overvåk" per rad i produkttabell (kobler til `price_fetch`-tabellen)
+- [ ] `tests/test_tasks.py`: tester for `run_price_fetch()` med mockete scrapers
 - [ ] `python -m pytest tests/ -v` → alt grønt
 - [ ] Merge til main
 
-### Etter det: `feature/price-fetch-task` (STEG 4)
-Se BACKLOG.md for detaljer.
+### Etter det: `feature/google-auth` (STEG 5) — BLOKKERT
+Krever `.env` med Google-credentials fra deg.
 
 ### Merk: `feature/google-auth` (STEG 5) er BLOKKERT
 Krever at du setter opp Google Cloud Console manuelt.
@@ -34,8 +33,8 @@ Se BACKLOG.md STEG 5 for instruksjoner.
 |------|-----------------------------|-------------|----------|
 | 1    | `feature/db-foundation`     | —           | ✅ Ferdig |
 | 2    | `feature/normalization`     | 1           | ✅ Ferdig |
-| 3    | `feature/product-persistence`| 1+2        | ⏳ Neste  |
-| 4    | `feature/price-fetch-task`  | 1+2+3       | 📋 Plan   |
+| 3    | `feature/product-persistence`| 1+2        | ✅ Ferdig |
+| 4    | `feature/price-fetch-task`  | 1+2+3       | ⏳ Neste  |
 | 5    | `feature/google-auth`       | 1 + .env ⚠️ | 🔒 Blokkert |
 | 6    | `feature/per-user-isolation`| 5           | 🔒 Blokkert |
 | 7    | `feature/shopping-list`     | 1+2+5+6     | 📋 Plan   |

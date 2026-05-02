@@ -23,9 +23,11 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] `tasks.py` — `run_auto_normalize()`, `python tasks.py normalize`
 - [x] 26 nye tester, 97 totalt grønne
 
-### STEG 3 · `feature/product-persistence`
-- [ ] Scrapers kobles til DB etter søk: `upsert_product()` per resultat
-- [ ] `scrapers/oda.py` + `scrapers/meny.py` — `fetch_price(product_id)` async
+### STEG 3 · `feature/product-persistence` ✅ mai 2026
+- [x] `scrapers/oda.py`: `upsert_product()` + `upsert_normal()` per søkeresultat
+- [x] `scrapers/meny.py`: samme mønster, bruker EAN som produkt-ID
+- [x] `fetch_price(product_id)` async på begge scrapers (returnerer None ved feil)
+- [x] 14 nye tester (mockete HTTP), 111 totalt grønne
 
 ### STEG 4 · `feature/price-fetch-task`
 - [ ] `db.py` — `add_to_price_fetch()`, `remove_from_price_fetch()`, `get_price_fetch_products()`

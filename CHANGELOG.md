@@ -4,6 +4,12 @@
 
 Spec: GROCERY_SCRAPER_SPEC.md (2026-05-01)
 
+### feature/product-persistence (mai 2026)
+- `scrapers/oda.py` + `scrapers/meny.py`: lagrer produkt og normalnavn i DB etter hvert søk
+- `fetch_price(product_id)` async på begge scrapers — returnerer `float | None`
+- `tests/test_scrapers.py`: 14 tester med fullstendig mockete httpx
+- 111 tester grønne
+
 ### feature/normalization (mai 2026)
 - `auto_normalize()`: lowercase, CamelCase-split, COMPOUND_SPLITS (8 norske sammensetninger), volum-norm (1000g→1kg, "liter"→"l")
 - `resolve_name()`: eneste UI-funksjon for produktnavn — prioritet custom > auto > original
