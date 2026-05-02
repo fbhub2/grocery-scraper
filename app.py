@@ -8,9 +8,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from scrapers import oda_search, meny_search
 from scrapers.base import split_name_variant
 import db
+import auth
 from normalize import parse_product_name, normalize_search_term
 
 st.set_page_config(page_title="Prissammenligning", page_icon="🛒", layout="wide")
+
+_user = auth.require_login()
+_user_db_id = db.ensure_user(_user["sub"], _user["email"], _user["name"])
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
 
@@ -89,8 +93,20 @@ if "liste_resultater" not in st.session_state:
     st.session_state.liste_resultater = None
 
 
-# --- Sidebar: handleliste ---
+# --- Sidebar: brukerinfo + handleliste ---
 with st.sidebar:
+    c_pic, c_info = st.columns([1, 3])
+    with c_pic:
+        if _user.get("picture"):
+            st.image(_user["picture"], width=40)
+    with c_info:
+        st.write(f"**{_user['name']}**")
+        st.caption(_user["email"])
+    if st.button("Logg ut"):
+        del st.session_state["user"]
+        st.rerun()
+    st.divider()
+
     st.header("🛒 Handleliste")
 
     if not st.session_state.handleliste:
