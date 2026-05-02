@@ -15,9 +15,14 @@ def search(query: str, limit: int = 5) -> list[Product]:
     store_id = db.ensure_store("oda")
 
     products = []
+    seen_ids: set[str] = set()
     for item in data.get("items", []):
         if item.get("type") != "product":
             continue
+        product_id = str(item.get("id", ""))
+        if product_id and product_id in seen_ids:
+            continue
+        seen_ids.add(product_id)
         a = item["attributes"]
         unit = f"{a.get('gross_unit_price', '')} kr/{a.get('unit_price_quantity_abbreviation', '')}".strip(" kr/") or None
         images = a.get("images") or []
@@ -30,7 +35,6 @@ def search(query: str, limit: int = 5) -> list[Product]:
                 image_url = thumb
 
         name = a["name"]
-        product_id = str(item.get("id", ""))
 
         try:
             if product_id:

@@ -29,12 +29,16 @@ def search(query: str, limit: int = 5) -> list[Product]:
     store_id = db.ensure_store("meny")
 
     products = []
-    for hit in data.get("products", {}).get("hits", [])[:limit]:
+    seen_ids: set[str] = set()
+    for hit in data.get("products", {}).get("hits", []):
         src = hit.get("contentData", {}).get("_source", {})
         full = f"{src.get('title', '')} {hit.get('description', '')}".strip()
         name, variant = split_name_variant(full)
 
         product_id = str(src.get("ean") or src.get("productId") or "")
+        if product_id and product_id in seen_ids:
+            continue
+        seen_ids.add(product_id)
 
         try:
             if product_id:
@@ -56,6 +60,8 @@ def search(query: str, limit: int = 5) -> list[Product]:
                 ),
             )
         )
+        if len(products) >= limit:
+            break
     return products
 
 
