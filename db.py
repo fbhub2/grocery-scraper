@@ -558,6 +558,29 @@ def get_price_fetch_products(user_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_all_price_fetch_products() -> list[dict]:
+    """Returnerer alle unike produkter i price_fetch på tvers av brukere."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT p.id, p.product_id, p.original_name, p.store_id,
+                      s.name as store_name
+               FROM price_fetch pf
+               JOIN product p ON pf.product_id = p.id
+               JOIN store s ON p.store_id = s.id""",
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_watchlist_by_name(original_name: str) -> list[dict]:
+    """Alle watchlist-items (alle brukere) med gitt original_name og status 'waiting'."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM watchlist WHERE original_name = ? AND status = 'waiting'",
+            (original_name,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # v2.0 — handleliste (shopping_list, per bruker)
 # ---------------------------------------------------------------------------
