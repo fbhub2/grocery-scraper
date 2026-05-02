@@ -19,8 +19,12 @@ _user_db_id = db.ensure_user(_user["sub"], _user["email"], _user["name"])
 STORES = {"Oda": oda_search, "Meny": meny_search}
 
 
+def _list_name() -> str:
+    return f"user_{_user_db_id}"
+
+
 def load_liste() -> list[dict]:
-    return db.get_list("default")
+    return db.get_list(_list_name())
 
 
 def _item_display(name: str, volume: str | None, image_url: str | None = None) -> None:
@@ -123,7 +127,7 @@ with st.sidebar:
                 for sname, t in item_trends.items():
                     st.caption(f"↓ {sname}: -{abs(t['delta']):.2f} kr siden sist")
             if c2.button("✕", key=f"fjern_idx_{idx}", help=f"Fjern {item['product_name']}"):
-                db.remove_item("default", item["product_name"], item_id=item.get("id"))
+                db.remove_item(_list_name(), item["product_name"], item_id=item.get("id"))
                 st.session_state.handleliste = [
                     i for i in st.session_state.handleliste if i.get("id") != item.get("id")
                 ]
@@ -310,7 +314,7 @@ if st.session_state.search_results is not None:
                     name = row["Produkt"]
                     if name and name.lower() not in liste_set:
                         db.add_item(
-                            "default", name,
+                            _list_name(), name,
                             store=row["Butikk"],
                             price=float(row["Pris (kr)"]),
                             volume=row["Mengde"] or None,
@@ -371,7 +375,7 @@ if st.session_state.search_results is not None:
                         if st.button("➕ Legg til liste", key=f"legg_{store}_{i}"):
                             search_term = normalize_search_term(name)
                             db.add_item(
-                                "default", name,
+                                _list_name(), name,
                                 store=store, price=price,
                                 volume=variant, search_term=search_term,
                                 image_url=image_url,
