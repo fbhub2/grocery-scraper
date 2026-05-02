@@ -1,8 +1,11 @@
 import os
 import secrets
+from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 from authlib.integrations.httpx_client import OAuth2Client
+
+_DOTENV_PATH = Path(__file__).parent / ".env"
 
 _AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -10,7 +13,7 @@ _USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 
 def _load_config() -> dict:
-    load_dotenv(override=True)
+    load_dotenv(dotenv_path=_DOTENV_PATH, override=True)
     return {
         "client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
         "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""),
