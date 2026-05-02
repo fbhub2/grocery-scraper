@@ -103,7 +103,7 @@ with st.sidebar:
         st.write(f"**{_user['name']}**")
         st.caption(_user["email"])
     if st.button("Logg ut"):
-        del st.session_state["user"]
+        auth.logout()
         st.rerun()
     st.divider()
 

@@ -66,35 +66,52 @@ def get_current_user() -> dict | None:
     return st.session_state.get("user")
 
 
+def logout() -> None:
+    import db as _db
+    token = st.query_params.get("s")
+    if token:
+        _db.delete_session(token)
+    st.session_state.pop("user", None)
+    st.query_params.clear()
+
+
 def require_login() -> dict:
     """
     Kall øverst i app.py (etter st.set_page_config).
-    Håndterer ?code= callback, viser login-knapp, returnerer bruker-dict.
+    - Håndterer ?code= callback fra Google
+    - Gjenoppretter session fra ?s=<token> ved F5-reload
+    - Viser login-knapp hvis ikke innlogget → st.stop()
+    - Returnerer bruker-dict hvis innlogget
     """
+    import db as _db
     params = st.query_params
 
+    # 1. OAuth callback fra Google
     if "code" in params:
         try:
             user = exchange_code_for_user(params["code"])
+            token = secrets.token_urlsafe(32)
+            _db.create_session(token, user)
             st.session_state["user"] = user
             st.query_params.clear()
+            st.query_params["s"] = token
             st.rerun()
         except Exception as e:
             st.error(f"Innlogging feilet: {e}")
             st.stop()
 
+    # 2. Gjenopprett session fra URL-token (overlever F5)
+    if "user" not in st.session_state and "s" in params:
+        user = _db.get_session_user(params["s"])
+        if user:
+            st.session_state["user"] = user
+
     user = get_current_user()
     if user:
         return user
 
-    cfg = _load_config()
-    auth_url = get_auth_url()
-
+    # 3. Vis login-side
     st.title("🛒 Prissammenligning")
     st.info("Logg inn med Google for å bruke appen.")
-    st.link_button("Logg inn med Google", auth_url)
-    with st.expander("🔍 Debug"):
-        st.write(f"**client_id:** `{cfg['client_id']}`")
-        st.write(f"**redirect_uri:** `{repr(cfg['redirect_uri'])}`")
-        st.code(auth_url)
+    st.link_button("Logg inn med Google", get_auth_url())
     st.stop()
