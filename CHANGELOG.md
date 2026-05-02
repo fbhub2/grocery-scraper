@@ -2,6 +2,13 @@
 
 ## [Unreleased — v2.0 pågående]
 
+### feature/google-auth (mai 2026)
+- `auth.py`: Google OAuth 2.0 via authlib — `get_auth_url()`, `exchange_code_for_user()`, `require_login()`
+- `app.py`: `require_login()` ved oppstart, brukerinfo (bilde/navn/epost/logg ut) øverst i sidebar
+- `requirements.txt`: authlib>=1.3, python-dotenv>=1.0
+- `tests/test_auth.py`: 3 tester for OAuth-flyt med mockete klient, 129 totalt grønne
+- Branch på GitHub — ikke merget til main før manuell test
+
 ### feature/price-fetch-task (mai 2026)
 - `db.py`: `get_all_price_fetch_products()` (unike produkter på tvers av brukere), `get_watchlist_by_name()` (kun status=waiting)
 - `tasks.py`: `run_price_fetch()` — parallell henting via `asyncio.gather`, lagrer i `product_price_history`, sjekker absolutt/relativ/sale-terskler

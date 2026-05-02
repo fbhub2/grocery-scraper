@@ -4,25 +4,21 @@
 
 ---
 
-## ✅ STEG 4 ferdig — `feature/price-fetch-task` (mai 2026)
+## ✅ STEG 5 ferdig — `feature/google-auth` (mai 2026)
 
-126 tester grønne. Merget til main.
+129 tester grønne. Branch pushet til GitHub.
+**Ikke merget til main** — krever at du tester innlogging manuelt i nettleseren.
 
-## Nå: `feature/google-auth` (STEG 5) — BLOKKERT ⚠️
+### Slik tester du auth:
+```
+streamlit run app.py
+```
+Åpne http://localhost:8501 — du skal se en "Logg inn med Google"-knapp.
 
-**Blokkert:** Krever at du setter opp Google Cloud Console manuelt.
+## Nå: `feature/per-user-isolation` (STEG 6)
 
-### Du må gjøre dette først:
-1. Gå til https://console.cloud.google.com
-2. Opprett OAuth 2.0 Client ID (Web application)
-3. Sett Redirect URI: `http://localhost:8501/oauth/callback`
-4. Kopier Client ID og Client Secret
-5. Opprett `.env` i `C:\mittprosjekt\` med:
-   ```
-   GOOGLE_CLIENT_ID=<din client id>
-   GOOGLE_CLIENT_SECRET=<din client secret>
-   ```
-6. Si fra — da implementerer jeg STEG 5.
+**Avhenger av:** STEG 5 er ute i review.
+**Kan starte nå** — endringer er bakoverkompatible med eksisterende DB.
 
 ---
 
