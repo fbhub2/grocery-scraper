@@ -41,15 +41,16 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 ### STEG 5 · `feature/google-auth` ✅ mai 2026
 - [x] `.env` med GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
 - [x] `requirements.txt` — authlib>=1.3, python-dotenv>=1.0
-- [x] `auth.py` — `get_auth_url()`, `exchange_code_for_user()`, `require_login()`
+- [x] `auth.py` — `get_auth_url()`, `exchange_code_for_user()`, `require_login()`, `st.secrets`-fallback for Streamlit Cloud
 - [x] `app.py` — `require_login()` øverst + brukerinfo i sidebar
 - [x] `tests/test_auth.py` — 3 tester, 129 totalt grønne
-- Branch pushet til GitHub (ikke merget til main — krever manuell test)
+- [x] Session-persistens via SQLite + `?s=<token>` (overlever F5)
+- [x] Merget til main og verifisert i prod (grocery-scraper-bitflow.streamlit.app)
 
-### STEG 6 · `feature/per-user-isolation`
-- [ ] `db.py` — `user_normal`-tabell, `set_custom_name()`
-- [ ] Alle bruker-spesifikke funksjoner tar `user_id`-parameter
-- [ ] `price_fetch` kobles til `user_id`
+### STEG 6 · `feature/per-user-isolation` ✅ mai 2026
+- [x] `app.py` — `_list_name()` returnerer `f"user_{_user_db_id}"` — handleliste er isolert per bruker
+- [x] Alle `db.add_item`/`remove_item`/`get_list`-kall bruker `_list_name()`
+- [x] Merget til main
 
 ---
 
@@ -79,6 +80,9 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 
 ## 🔧 Bug-fixes (kan tas parallelt)
 
+- [x] **`fix/admin-view`** — Admin-panel inline i app.py, admin-knapp skjult for ikke-admin, email ikke mailto, OBS-seksjon fjernet
+- [x] **`fix/streamlit-cloud-auth`** — `auth.py` leser fra `st.secrets` som fallback, `.strip()` på alle OAuth-verdier
+- [x] **`fix/scraper-dedup`** — `seen_ids`-dedup i Oda og Meny scrapers
 - [ ] **`fix/search-ux`** (ISSUE-02) — Fjern antall-felt fra søkeskjema, flytt til "Legg til"-dialog
 - [ ] **`fix/price-baseline`** (ISSUE-03) — Baseline per product_id+store_id, aldri blande volum
 - [ ] **`fix/price-arrow-semantics`** (ISSUE-06) — ↑=dyrere(rødt), ↓=billigere(grønt)
