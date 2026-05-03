@@ -15,10 +15,20 @@ _USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 def _load_config() -> dict:
     load_dotenv(dotenv_path=_DOTENV_PATH, override=True)
+
+    def _get(key: str, default: str = "") -> str:
+        val = os.environ.get(key, "").strip()
+        if val:
+            return val
+        try:
+            return str(st.secrets[key]).strip()
+        except Exception:
+            return default
+
     return {
-        "client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
-        "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET", ""),
-        "redirect_uri": os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8501/"),
+        "client_id": _get("GOOGLE_CLIENT_ID"),
+        "client_secret": _get("GOOGLE_CLIENT_SECRET"),
+        "redirect_uri": _get("GOOGLE_REDIRECT_URI", "http://localhost:8501/"),
     }
 
 

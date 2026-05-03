@@ -7,14 +7,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, str(Path(__file__).parent))
 from scrapers import oda_search, meny_search
 from scrapers.base import split_name_variant
+import os
+import sqlite3
 import db
 import auth
 from normalize import parse_product_name, normalize_search_term
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 st.set_page_config(page_title="Prissammenligning", page_icon="🛒", layout="wide")
 
 _user = auth.require_login()
 _user_db_id = db.ensure_user(_user["sub"], _user["email"], _user["name"])
+_ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+_is_admin = bool(_ADMIN_EMAIL) and _user.get("email") == _ADMIN_EMAIL
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
 
@@ -91,6 +98,91 @@ if "last_query" not in st.session_state:
     st.session_state.last_query = ""
 if "liste_resultater" not in st.session_state:
     st.session_state.liste_resultater = None
+if "show_admin" not in st.session_state:
+    st.session_state.show_admin = False
+
+
+def _admin_panel() -> None:
+    st.title("🔧 Admin")
+
+    conn = sqlite3.connect(db.DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    def _count(table: str) -> int:
+        return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+    def _adf(sql: str, params: tuple = ()) -> pd.DataFrame:
+        rows = conn.execute(sql, params).fetchall()
+        return pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
+
+    st.subheader("Oversikt")
+    cols = st.columns(6)
+    for col, (label, table) in zip(cols, [
+        ("Brukere", "user"),
+        ("Produkter", "product"),
+        ("Normnavn", "normal"),
+        ("Prishistorikk", "product_price_history"),
+        ("Watchlist", "watchlist"),
+        ("Sesjoner", "session"),
+    ]):
+        col.metric(label, _count(table))
+
+    st.divider()
+
+    st.subheader("Brukere")
+    users_df = _adf("SELECT id, email, name, created_at FROM user ORDER BY created_at DESC")
+    if not users_df.empty:
+        st.dataframe(users_df, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Ingen brukere")
+
+    st.subheader("Aktive sesjoner")
+    sessions_df = _adf(
+        """SELECT s.created_at,
+                  json_extract(s.user_json,'$.email') as email,
+                  json_extract(s.user_json,'$.name') as name,
+                  substr(s.token, 1, 8) || '...' as token_prefix
+           FROM session s
+           ORDER BY s.created_at DESC LIMIT 20"""
+    )
+    if not sessions_df.empty:
+        st.dataframe(sessions_df, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Ingen sesjoner")
+
+    st.divider()
+    st.subheader("Rådata")
+
+    all_tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+    ).fetchall()]
+
+    chosen = st.selectbox("Velg tabell", all_tables, key="admin_table_select")
+    row_limit = st.slider("Maks rader", 10, 500, 50, key="admin_row_limit")
+
+    if chosen:
+        tdf = _adf(f"SELECT * FROM {chosen} ORDER BY rowid DESC LIMIT ?", (row_limit,))
+        if not tdf.empty:
+            st.dataframe(tdf, use_container_width=True, hide_index=True)
+            st.caption(f"{len(tdf)} rader (maks {row_limit})")
+        else:
+            st.caption("Tom tabell")
+
+    st.divider()
+    st.subheader("Vedlikehold")
+
+    mc1, mc2 = st.columns(2)
+    with mc1:
+        if st.button("Slett utlopte sesjoner (eldre enn 30 dager)", type="secondary"):
+            conn.execute("DELETE FROM session WHERE created_at < date('now', '-30 days')")
+            conn.commit()
+            st.success("Utlopte sesjoner slettet")
+    with mc2:
+        st.metric("Normal-navn uten auto_name", conn.execute(
+            "SELECT COUNT(*) FROM normal WHERE auto_name IS NULL"
+        ).fetchone()[0])
+
+    conn.close()
 
 
 # --- Sidebar: brukerinfo + handleliste ---
@@ -101,10 +193,15 @@ with st.sidebar:
             st.image(_user["picture"], width=40)
     with c_info:
         st.write(f"**{_user['name']}**")
-        st.caption(_user["email"])
+        st.caption(f"`{_user['email']}`")
     if st.button("Logg ut"):
         auth.logout()
         st.rerun()
+    if _is_admin:
+        label = "🔧 Skjul admin" if st.session_state.show_admin else "🔧 Admin"
+        if st.button(label, type="secondary"):
+            st.session_state.show_admin = not st.session_state.show_admin
+            st.rerun()
     st.divider()
 
     st.header("🛒 Handleliste")
@@ -180,37 +277,11 @@ with st.sidebar:
             st.session_state.search_results = None
             st.rerun()
 
-    # --- OBS-status ---
-    st.divider()
-    st.subheader("📰 OBS-tilbudsavis")
-    obs_status = db.get_obs_status()
 
-    if obs_status["has_data"]:
-        if obs_status["is_expired"]:
-            st.warning("⏰ OBS-priser utløpt")
-        else:
-            st.success(f"✅ Gyldig til {obs_status['valid_to']}")
 
-        col1, col2 = st.columns(2)
-        col1.metric("Produkter", obs_status["total_products"])
-        col2.write(f"**Uke:** {obs_status['valid_week']}")
-
-        if st.button("🔄 Oppdater OBS", use_container_width=True, key="update_obs"):
-            st.info("""
-                **Slik importerer du ny OBS-uke:**
-
-                1. Åpne https://kundeavis-obs.coop.no/fso/
-                2. Last ned eller ta screenshot av kundeavisen
-                3. Åpne Claude Desktop eller claude.ai/code
-                4. Bruk `import_obs_catalog` tool med PDF/bilde
-                5. Produktene lagres automatisk i databasen
-
-                **Eller:** Les detaljert guide i `obs_import.md`
-            """)
-    else:
-        st.caption("Ingen OBS-data importert ennå")
-        st.button("📥 Importer OBS nå", use_container_width=True, key="import_obs_first")
-
+if st.session_state.show_admin and _is_admin:
+    _admin_panel()
+    st.stop()
 
 # --- Topp ---
 st.title("🛒 Prissammenligning")
