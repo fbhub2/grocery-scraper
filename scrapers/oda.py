@@ -37,6 +37,14 @@ def search(query: str, limit: int = 5) -> list[Product]:
 
         name = a["name"]
 
+        # Hvis fettinnhold e.l. (0,5%, 1,2%) finnes i name_extra men ikke i name,
+        # legg det til i name — prosent er produkttype, ikke mengde
+        ne = a.get("name_extra", "")
+        ne_text, ne_size = split_name_variant(ne)
+        extra_pcts = [t for t in re.findall(r'\d+[,.]?\d*\s*%', ne_text) if t not in name]
+        if extra_pcts:
+            name = f"{name} {' '.join(extra_pcts)}"
+
         try:
             if product_id:
                 db.upsert_product(product_id, name, store_id)
@@ -44,20 +52,12 @@ def search(query: str, limit: int = 5) -> list[Product]:
         except Exception:
             pass
 
-        ne = a.get("name_extra", "")
-        ne_text, ne_size = split_name_variant(ne)
-        # Inkluder prosent-tokens fra name_extra (f.eks. fettinnhold "0,5%")
-        # hvis de ikke allerede er del av produktnavnet
-        extra_pcts = [t for t in re.findall(r'\d+[,.]?\d*\s*%', ne_text) if t not in name]
-        variant_parts = extra_pcts + ([ne_size] if ne_size else [])
-        variant = ' · '.join(variant_parts) if variant_parts else None
-
         products.append(Product(
             name=name,
             price=float(a["gross_price"]),
             unit_price=unit,
             url=a.get("front_url", ""),
-            variant=variant,
+            variant=ne_size,
             image_url=image_url,
         ))
         if len(products) >= limit:
