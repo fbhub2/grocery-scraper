@@ -6,12 +6,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).parent))
 from scrapers import oda_search, meny_search
-from scrapers.base import split_name_variant
 import os
 import sqlite3
 import db
 import auth
-from normalize import parse_product_name, normalize_search_term
+from normalize import normalize_search_term
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
@@ -26,32 +25,11 @@ _is_admin = bool(_ADMIN_EMAIL) and _user.get("email") == _ADMIN_EMAIL
 STORES = {"Oda": oda_search, "Meny": meny_search}
 
 
-def _list_name() -> str:
-    return f"user_{_user_db_id}"
-
-
-def load_liste() -> list[dict]:
-    return db.get_list(_list_name())
-
-
-def _item_display(name: str, volume: str | None, image_url: str | None = None) -> None:
-    if image_url and isinstance(image_url, str):
-        st.image(image_url, width=50)
-    st.write(name.capitalize())
-    if volume:
-        st.caption(volume)
-
-
-def _query_variants(query: str, volume: str | None) -> list[str]:
-    variants = [query]
-    if volume:
-        v_nospace = volume.replace(" ", "")
-        variants.append(f"{query} {v_nospace}")
-    return list(dict.fromkeys(variants))
-
+# ---------------------------------------------------------------------------
+# Hjelpefunksjoner
+# ---------------------------------------------------------------------------
 
 def _best_product(products: list, preferred_volume: str | None):
-    """Returnerer produktet som best matcher preferred_volume, eller første resultat."""
     if not products:
         return None
     if not preferred_volume:
@@ -64,19 +42,10 @@ def _best_product(products: list, preferred_volume: str | None):
     return products[0]
 
 
-def _best_price(products: list, preferred_volume: str | None) -> float | None:
-    p = _best_product(products, preferred_volume)
-    if p is None:
-        return None
-    return p["price"] if isinstance(p, dict) else p.price
-
-
 def run_search(query: str, limit: int) -> tuple[dict, dict]:
     results, errors = {}, {}
     with ThreadPoolExecutor(max_workers=len(STORES)) as executor:
-        futures = {
-            executor.submit(fn, query, limit): name for name, fn in STORES.items()
-        }
+        futures = {executor.submit(fn, query, limit): name for name, fn in STORES.items()}
         for future in as_completed(futures):
             name = futures[future]
             try:
@@ -84,31 +53,48 @@ def run_search(query: str, limit: int) -> tuple[dict, dict]:
             except Exception as e:
                 errors[name] = str(e)
                 results[name] = []
-
-    obs_results = db.search_obs(query)
-    results["OBS 📰"] = obs_results
-
+    obs = db.search_obs(query)
+    if obs:
+        results["OBS 📰"] = obs
     return results, errors
 
 
-# --- Session state ---
-if "handleliste" not in st.session_state:
-    st.session_state.handleliste = load_liste()
-if "search_results" not in st.session_state:
-    st.session_state.search_results = None
-if "search_errors" not in st.session_state:
-    st.session_state.search_errors = {}
-if "last_query" not in st.session_state:
-    st.session_state.last_query = ""
-if "liste_resultater" not in st.session_state:
-    st.session_state.liste_resultater = None
-if "show_admin" not in st.session_state:
-    st.session_state.show_admin = False
+def _user_lists() -> list[dict]:
+    return db.get_shopping_lists(_user_db_id)
 
+
+def _all_item_names() -> set[str]:
+    names: set[str] = set()
+    for lst in _user_lists():
+        for item in db.get_shopping_list_items(lst["id"]):
+            names.add(item["original_name"].lower())
+    return names
+
+
+# ---------------------------------------------------------------------------
+# Session state
+# ---------------------------------------------------------------------------
+
+_DEFAULTS: dict = {
+    "section": "søk",
+    "active_list_id": None,
+    "search_results": None,
+    "search_errors": {},
+    "last_query": "",
+    "liste_resultater": None,
+    "show_admin": False,
+}
+for _k, _v in _DEFAULTS.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
+
+# ---------------------------------------------------------------------------
+# Admin-panel
+# ---------------------------------------------------------------------------
 
 def _admin_panel() -> None:
     st.title("🔧 Admin")
-
     conn = sqlite3.connect(db.DB_PATH)
     conn.row_factory = sqlite3.Row
 
@@ -120,50 +106,36 @@ def _admin_panel() -> None:
         return pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
 
     st.subheader("Oversikt")
-    cols = st.columns(6)
-    for col, (label, table) in zip(cols, [
-        ("Brukere", "user"),
-        ("Produkter", "product"),
-        ("Normnavn", "normal"),
-        ("Prishistorikk", "product_price_history"),
-        ("Watchlist", "watchlist"),
-        ("Sesjoner", "session"),
+    acols = st.columns(6)
+    for col, (label, table) in zip(acols, [
+        ("Brukere", "user"), ("Produkter", "product"), ("Normnavn", "normal"),
+        ("Prishistorikk", "product_price_history"), ("Watchlist", "watchlist"), ("Sesjoner", "session"),
     ]):
         col.metric(label, _count(table))
 
     st.divider()
-
     st.subheader("Brukere")
-    users_df = _adf("SELECT id, email, name, created_at FROM user ORDER BY created_at DESC")
-    if not users_df.empty:
-        st.dataframe(users_df, use_container_width=True, hide_index=True)
-    else:
-        st.caption("Ingen brukere")
+    udf = _adf("SELECT id, email, name, created_at FROM user ORDER BY created_at DESC")
+    st.dataframe(udf, use_container_width=True, hide_index=True) if not udf.empty else st.caption("Ingen")
 
-    st.subheader("Aktive sesjoner")
-    sessions_df = _adf(
-        """SELECT s.created_at,
-                  json_extract(s.user_json,'$.email') as email,
-                  json_extract(s.user_json,'$.name') as name,
-                  substr(s.token, 1, 8) || '...' as token_prefix
-           FROM session s
-           ORDER BY s.created_at DESC LIMIT 20"""
+    st.subheader("Handlelister")
+    sldf = _adf(
+        """SELECT sl.id, u.email, sl.name, sl.created_at, COUNT(sli.id) as items
+           FROM shopping_list sl
+           JOIN user u ON sl.user_id = u.id
+           LEFT JOIN shopping_list_item sli ON sli.list_id = sl.id
+           WHERE sl.archived = 0
+           GROUP BY sl.id ORDER BY sl.created_at DESC"""
     )
-    if not sessions_df.empty:
-        st.dataframe(sessions_df, use_container_width=True, hide_index=True)
-    else:
-        st.caption("Ingen sesjoner")
+    st.dataframe(sldf, use_container_width=True, hide_index=True) if not sldf.empty else st.caption("Ingen")
 
     st.divider()
     st.subheader("Rådata")
-
     all_tables = [r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
     ).fetchall()]
-
     chosen = st.selectbox("Velg tabell", all_tables, key="admin_table_select")
     row_limit = st.slider("Maks rader", 10, 500, 50, key="admin_row_limit")
-
     if chosen:
         tdf = _adf(f"SELECT * FROM {chosen} ORDER BY rowid DESC LIMIT ?", (row_limit,))
         if not tdf.empty:
@@ -174,165 +146,85 @@ def _admin_panel() -> None:
 
     st.divider()
     st.subheader("Vedlikehold")
-
     mc1, mc2 = st.columns(2)
     with mc1:
-        if st.button("Slett utlopte sesjoner (eldre enn 30 dager)", type="secondary"):
+        if st.button("Slett utlopte sesjoner (>30 dager)", type="secondary"):
             conn.execute("DELETE FROM session WHERE created_at < date('now', '-30 days')")
             conn.commit()
-            st.success("Utlopte sesjoner slettet")
+            st.success("Slettet")
     with mc2:
-        st.metric("Normal-navn uten auto_name", conn.execute(
+        st.metric("Normal uten auto_name", conn.execute(
             "SELECT COUNT(*) FROM normal WHERE auto_name IS NULL"
         ).fetchone()[0])
-
     conn.close()
 
 
-# --- Sidebar: brukerinfo + handleliste ---
-with st.sidebar:
-    c_pic, c_info = st.columns([1, 3])
-    with c_pic:
-        if _user.get("picture"):
-            st.image(_user["picture"], width=40)
-    with c_info:
-        st.write(f"**{_user['name']}**")
-        st.caption(f"`{_user['email']}`")
-    if st.button("Logg ut"):
-        auth.logout()
-        st.rerun()
-    if _is_admin:
-        label = "🔧 Skjul admin" if st.session_state.show_admin else "🔧 Admin"
-        if st.button(label, type="secondary"):
-            st.session_state.show_admin = not st.session_state.show_admin
-            st.rerun()
-    st.divider()
+# ---------------------------------------------------------------------------
+# "Legg i liste"-popover (brukes i søkeresultater)
+# ---------------------------------------------------------------------------
 
-    st.header("🛒 Handleliste")
-
-    if not st.session_state.handleliste:
-        st.caption("Listen er tom. Søk etter en vare og legg den til.")
-    else:
-        handleliste_copy = list(st.session_state.handleliste)
-        sidebar_trends = (st.session_state.liste_resultater or {}).get("trends", {})
-
-        for idx, item in enumerate(handleliste_copy):
-            c1, c2 = st.columns([5, 1])
-            with c1:
-                _item_display(item["product_name"], item.get("volume"), item.get("image_url"))
-                item_trends = sidebar_trends.get(item["product_name"], {})
-                for sname, t in item_trends.items():
-                    st.caption(f"↓ {sname}: -{abs(t['delta']):.2f} kr siden sist")
-            if c2.button("✕", key=f"fjern_idx_{idx}", help=f"Fjern {item['product_name']}"):
-                db.remove_item(_list_name(), item["product_name"], item_id=item.get("id"))
-                st.session_state.handleliste = [
-                    i for i in st.session_state.handleliste if i.get("id") != item.get("id")
-                ]
+def _legg_til_popover(name: str, key_suffix: str) -> None:
+    with st.popover("➕ Legg i liste"):
+        lists = _user_lists()
+        if not lists:
+            st.info("Ingen lister ennå.")
+            nl = st.text_input("Opprett ny liste", value="Handleliste", key=f"nl_{key_suffix}")
+            if st.button("Opprett og legg til", key=f"cnl_{key_suffix}", type="primary"):
+                lid = db.create_shopping_list(_user_db_id, nl.strip() or "Handleliste")
+                db.add_to_shopping_list(lid, name)
                 st.rerun()
-
-        st.divider()
-
-        if st.button("🔍 Søk alle på listen", type="primary", use_container_width=True):
-            varer = list(st.session_state.handleliste)
-            rows = []
-            totals = {s: 0.0 for s in STORES}
-            mangler: dict[str, list[str]] = {s: [] for s in STORES}
-
-            trends: dict[str, dict[str, dict]] = {}
-
-            with st.spinner("Søker alle varer på listen ..."):
-                for item in varer:
-                    vare = item["product_name"]
-                    preferred_volume = item.get("volume")
-                    search_query = item.get("search_term") or normalize_search_term(vare)
-                    res, _ = run_search(search_query, 3)
-                    vare_label = vare.capitalize()
-                    if preferred_volume:
-                        vare_label += f" ({preferred_volume})"
-                    row: dict = {"Vare": vare_label, "_navn": vare}
-                    for store_name in STORES:
-                        prods = res.get(store_name, [])
-                        best = _best_product(prods, preferred_volume)
-                        if best:
-                            price = best.price if hasattr(best, "price") else best["price"]
-                            unit_price = getattr(best, "unit_price", None) or (
-                                best.get("unit_price") if isinstance(best, dict) else None
-                            )
-                            row[store_name] = price
-                            row[f"{store_name} (enhet)"] = unit_price or ""
-                            totals[store_name] += price
-                            db.record_price(vare, store_name, price,
-                                            unit_price=unit_price, volume=preferred_volume)
-                            t = db.get_price_trend(vare, store_name)
-                            if t and t["delta"] < -0.01:
-                                trends.setdefault(vare, {})[store_name] = t
-                        else:
-                            row[store_name] = None
-                            row[f"{store_name} (enhet)"] = ""
-                            mangler[store_name].append(vare)
-                    rows.append(row)
-
-            st.session_state.liste_resultater = {
-                "rows": rows,
-                "totals": totals,
-                "mangler": mangler,
-                "trends": trends,
-            }
-            st.session_state.search_results = None
-            st.rerun()
-
-
-
-if st.session_state.show_admin and _is_admin:
-    _admin_panel()
-    st.stop()
-
-# --- Topp ---
-st.title("🛒 Prissammenligning")
-st.caption("Sammenligner priser fra Oda og Meny i sanntid")
-
-with st.form("search_form"):
-    col1, col2, col3 = st.columns([5, 1, 1])
-    with col1:
-        query = st.text_input(
-            "Søk etter produkt", placeholder="f.eks. havregryn, smør, egg..."
-        )
-    with col2:
-        limit = st.number_input("Antall", min_value=1, max_value=20, value=5)
-    with col3:
-        st.write("")
-        submitted = st.form_submit_button("Søk", type="primary", use_container_width=True)
-
-if submitted:
-    if not query.strip():
-        st.warning("Skriv inn et søkeord.")
-        st.stop()
-
-    with st.spinner(f'Søker etter "{query.strip()}" ...'):
-        results, errors = run_search(query.strip(), int(limit))
-
-    converted_results = {}
-    for store, products in results.items():
-        if store == "OBS 📰":
-            converted_results[store] = products
         else:
-            converted_results[store] = [p.to_dict() if hasattr(p, "to_dict") else p for p in products]
+            list_names = [l["name"] for l in lists]
+            chosen = st.selectbox("Velg liste", list_names, key=f"lsel_{key_suffix}")
+            qty = st.number_input("Antall", min_value=1, value=1, key=f"qty_{key_suffix}")
+            if st.button("Legg til", key=f"ladd_{key_suffix}", type="primary"):
+                lid = next(l["id"] for l in lists if l["name"] == chosen)
+                db.add_to_shopping_list(lid, name, quantity=int(qty))
+                st.success(f"✓ Lagt til i {chosen}")
 
-    st.session_state.search_results = converted_results
-    st.session_state.search_errors = errors
-    st.session_state.last_query = query.strip()
-    st.session_state.liste_resultater = None
 
+# ---------------------------------------------------------------------------
+# Seksjon: Søk
+# ---------------------------------------------------------------------------
 
-# --- Søkeresultater ---
-if st.session_state.search_results is not None:
+def _show_search() -> None:
+    st.title("🔍 Søk")
+
+    with st.form("search_form"):
+        col1, col2, col3 = st.columns([5, 1, 1])
+        with col1:
+            query = st.text_input("Søk etter produkt", placeholder="f.eks. havregryn, smør, egg...")
+        with col2:
+            limit = st.number_input("Antall", min_value=1, max_value=20, value=5)
+        with col3:
+            st.write("")
+            submitted = st.form_submit_button("Søk", type="primary", use_container_width=True)
+
+    if submitted:
+        if not query.strip():
+            st.warning("Skriv inn et søkeord.")
+            st.stop()
+        with st.spinner(f'Søker etter "{query.strip()}" ...'):
+            results, errors = run_search(query.strip(), int(limit))
+        converted: dict = {}
+        for store, products in results.items():
+            if store == "OBS 📰":
+                converted[store] = products
+            else:
+                converted[store] = [p.to_dict() if hasattr(p, "to_dict") else p for p in products]
+        st.session_state.search_results = converted
+        st.session_state.search_errors = errors
+        st.session_state.last_query = query.strip()
+
+    if st.session_state.search_results is None:
+        return
+
     q = st.session_state.last_query
     results = st.session_state.search_results
     errors = st.session_state.search_errors
+    already_added = _all_item_names()
 
-    liste_set = {item["product_name"].lower() for item in st.session_state.handleliste}
-
-    # --- Sammenstilt tabell ØVERST med filtre ---
+    # --- Kombinert tabell ---
     all_rows = [
         {
             "Butikk": store,
@@ -351,26 +243,22 @@ if st.session_state.search_results is not None:
         f1, f2 = st.columns([3, 2])
         with f1:
             available_stores = list(results.keys())
-            valgte_butikker = st.multiselect(
-                "Vis butikker", available_stores, default=available_stores,
-                key="filter_butikker",
+            valgte = st.multiselect(
+                "Vis butikker", available_stores, default=available_stores, key="filter_butikker"
             )
         with f2:
-            sorter_etter = st.selectbox(
-                "Sorter etter", ["Pris (kr)", "Produkt", "Butikk"],
-                key="filter_sortering",
+            sorter = st.selectbox(
+                "Sorter etter", ["Pris (kr)", "Produkt", "Butikk"], key="filter_sortering"
             )
 
         df = pd.DataFrame(all_rows)
-        if valgte_butikker:
-            df = df[df["Butikk"].isin(valgte_butikker)]
-        df = df.sort_values(sorter_etter, na_position="last").reset_index(drop=True)
+        if valgte:
+            df = df[df["Butikk"].isin(valgte)]
+        df = df.sort_values(sorter, na_position="last").reset_index(drop=True)
 
         selection = st.dataframe(
             df,
-            column_config={
-                "Pris (kr)": st.column_config.NumberColumn(format="%.2f kr"),
-            },
+            column_config={"Pris (kr)": st.column_config.NumberColumn(format="%.2f kr")},
             use_container_width=True,
             hide_index=True,
             on_select="rerun",
@@ -379,20 +267,26 @@ if st.session_state.search_results is not None:
 
         selected_rows = selection.selection.rows if selection else []
         if selected_rows:
-            if st.button(f"➕ Legg til valgte ({len(selected_rows)}) på handlelisten"):
-                for row_idx in selected_rows:
-                    row = df.iloc[row_idx]
-                    name = row["Produkt"]
-                    if name and name.lower() not in liste_set:
-                        db.add_item(
-                            _list_name(), name,
-                            store=row["Butikk"],
-                            price=float(row["Pris (kr)"]),
-                            volume=row["Mengde"] or None,
-                            search_term=normalize_search_term(name),
-                        )
-                st.session_state.handleliste = load_liste()
-                st.rerun()
+            lists = _user_lists()
+            ba1, ba2 = st.columns([2, 3])
+            with ba2:
+                if lists:
+                    target = st.selectbox(
+                        "Legg til i", [l["name"] for l in lists], key="bulk_list_target"
+                    )
+                else:
+                    target = st.text_input("Ny liste", value="Handleliste", key="bulk_new_list")
+            with ba1:
+                if st.button(f"➕ Legg til valgte ({len(selected_rows)})", type="primary"):
+                    if not lists:
+                        lid = db.create_shopping_list(_user_db_id, target or "Handleliste")
+                    else:
+                        lid = next(l["id"] for l in lists if l["name"] == target)
+                    for row_idx in selected_rows:
+                        pname = df.iloc[row_idx]["Produkt"]
+                        if pname and pname.lower() not in already_added:
+                            db.add_to_shopping_list(lid, pname)
+                    st.rerun()
 
     st.divider()
 
@@ -409,7 +303,6 @@ if st.session_state.search_results is not None:
             else:
                 for i, p in enumerate(results[store]):
                     is_obs = store == "OBS 📰"
-
                     name = p.get("product_name") if is_obs else p.get("name")
                     price = p.get("price")
                     unit_price = p.get("unit_price") if not is_obs else None
@@ -430,59 +323,88 @@ if st.session_state.search_results is not None:
                     st.markdown(price_line)
 
                     if is_obs and valid_to:
-                        from datetime import date
-                        is_expired = valid_to < date.today().isoformat()
-                        if is_expired:
+                        from datetime import date as _date
+                        if valid_to < _date.today().isoformat():
                             st.caption("⏰ Utløpt")
                         else:
                             st.caption(f"✅ Gyldig til {valid_to}")
-
                     if url:
                         st.markdown(f"[Se produkt]({url})")
 
-                    if name.lower() in liste_set:
+                    if name and name.lower() in already_added:
                         st.caption("✓ På handlelisten")
-                    else:
-                        if st.button("➕ Legg til liste", key=f"legg_{store}_{i}"):
-                            search_term = normalize_search_term(name)
-                            db.add_item(
-                                _list_name(), name,
-                                store=store, price=price,
-                                volume=variant, search_term=search_term,
-                                image_url=image_url,
-                            )
-                            st.session_state.handleliste = load_liste()
-                            st.rerun()
+                    elif name:
+                        _legg_til_popover(name, f"{store}_{i}")
                     st.divider()
 
 
-# --- Handlelistesøk-resultater ---
-elif st.session_state.liste_resultater is not None:
+# ---------------------------------------------------------------------------
+# Seksjon: Handlelister — prissammenligning
+# ---------------------------------------------------------------------------
+
+def _search_list_prices(items: list[dict]) -> None:
+    rows = []
+    totals = {s: 0.0 for s in STORES}
+    mangler: dict[str, list[str]] = {s: [] for s in STORES}
+    trends: dict[str, dict[str, dict]] = {}
+
+    with st.spinner("Søker priser for alle varer ..."):
+        for item in items:
+            vare = item["original_name"]
+            qty = item.get("quantity", 1)
+            res, _ = run_search(normalize_search_term(vare), 3)
+            row: dict = {"Vare": vare.capitalize(), "_navn": vare, "Antall": qty}
+            for store_name in STORES:
+                prods = res.get(store_name, [])
+                best = _best_product(prods, None)
+                if best:
+                    price = best.price if hasattr(best, "price") else best["price"]
+                    unit_price = (
+                        getattr(best, "unit_price", None)
+                        or (best.get("unit_price") if isinstance(best, dict) else None)
+                    )
+                    row[store_name] = price
+                    row[f"{store_name} (enhet)"] = unit_price or ""
+                    totals[store_name] += price * qty
+                    db.record_price(vare, store_name, price, unit_price=unit_price)
+                    t = db.get_price_trend(vare, store_name)
+                    if t and t["delta"] < -0.01:
+                        trends.setdefault(vare, {})[store_name] = t
+                else:
+                    row[store_name] = None
+                    row[f"{store_name} (enhet)"] = ""
+                    mangler[store_name].append(vare)
+            rows.append(row)
+
+    st.session_state.liste_resultater = {
+        "rows": rows, "totals": totals, "mangler": mangler, "trends": trends
+    }
+
+
+def _show_liste_resultater() -> None:
     lr = st.session_state.liste_resultater
-    rows = lr["rows"]
-    totals: dict[str, float] = lr["totals"]
-    mangler: dict[str, list[str]] = lr["mangler"]
-    trends: dict[str, dict[str, dict]] = lr.get("trends", {})
+    rows, totals = lr["rows"], lr["totals"]
+    mangler, trends = lr["mangler"], lr.get("trends", {})
 
-    if trends:
-        for vare, store_trends in trends.items():
-            for store_name, t in store_trends.items():
-                st.success(
-                    f"↓ Prisfall! **{vare.capitalize()}** er billigere på {store_name}: "
-                    f"kr {t['current']:.2f} (var kr {t['previous']:.2f}, spart kr {abs(t['delta']):.2f})"
-                )
+    for vare, store_trends in trends.items():
+        for store_name, t in store_trends.items():
+            st.success(
+                f"↓ Prisfall! **{vare.capitalize()}** er billigere på {store_name}: "
+                f"kr {t['current']:.2f} (var kr {t['previous']:.2f}, spart kr {abs(t['delta']):.2f})"
+            )
 
-    st.subheader("Handlelisteprissammenligning")
+    st.subheader("Prissammenligning")
 
     optimal_total = 0.0
     store_best_sums = {s: 0.0 for s in STORES}
     rows_display = []
     for row in rows:
+        qty = row.get("Antall", 1)
         prices = {s: row[s] for s in STORES if row.get(s) is not None}
         if prices:
             best = min(prices, key=prices.get)
-            store_best_sums[best] += prices[best]
-            optimal_total += prices[best]
+            store_best_sums[best] += prices[best] * qty
+            optimal_total += prices[best] * qty
         else:
             best = "—"
         product_name = row.get("_navn", row["Vare"])
@@ -503,26 +425,187 @@ elif st.session_state.liste_resultater is not None:
         col_config[f"{s} trend"] = st.column_config.TextColumn(f"{s} ↑↓")
 
     st.dataframe(
-        pd.DataFrame(rows_display),
-        column_config=col_config,
-        use_container_width=True,
-        hide_index=True,
+        pd.DataFrame(rows_display), column_config=col_config,
+        use_container_width=True, hide_index=True
     )
 
     st.subheader("Oppsummering")
     m_cols = st.columns(1 + len(STORES))
-    m_cols[0].metric("🏆 Optimal sum", f"kr {optimal_total:.2f}",
-                     help="Kjøper billigste alternativ per vare på tvers av butikker")
+    m_cols[0].metric(
+        "🏆 Optimal sum", f"kr {optimal_total:.2f}",
+        help="Billigste alternativ per vare på tvers av butikker"
+    )
     for i, store in enumerate(STORES, 1):
         delta = totals[store] - optimal_total
         m_cols[i].metric(
-            f"{store}",
+            store,
             f"kr {store_best_sums[store]:.2f}",
-            delta=f"Alt på {store}: kr {totals[store]:.2f}  (+kr {delta:.2f})" if delta > 0.01 else f"Alt på {store}: kr {totals[store]:.2f}",
+            delta=(
+                f"Alt på {store}: kr {totals[store]:.2f} (+kr {delta:.2f})"
+                if delta > 0.01
+                else f"Alt på {store}: kr {totals[store]:.2f}"
+            ),
             delta_color="off",
-            help=f"Sum av varer der {store} er billigst. Kjøper du alt på {store}: kr {totals[store]:.2f}",
         )
+    for store, missing in mangler.items():
+        if missing:
+            st.warning(f"{store}: ingen treff for: {', '.join(missing)}")
 
-    for store, items in mangler.items():
+
+# ---------------------------------------------------------------------------
+# Seksjon: Handlelister
+# ---------------------------------------------------------------------------
+
+def _show_handlelister() -> None:
+    active_id = st.session_state.active_list_id
+
+    if active_id is None:
+        st.title("🛒 Mine handlelister")
+
+        with st.expander("➕ Ny liste"):
+            nl = st.text_input(
+                "Navn på listen", placeholder="f.eks. Ukeshandel", key="new_list_name"
+            )
+            if st.button("Opprett liste", key="create_list_btn") and nl.strip():
+                db.create_shopping_list(_user_db_id, nl.strip())
+                st.rerun()
+
+        lists = _user_lists()
+        if not lists:
+            st.info(
+                "Ingen handlelister ennå. Opprett en ny liste ovenfor, "
+                "eller søk etter varer (🔍 Søk) og legg dem til."
+            )
+            return
+
+        for lst in lists:
+            c1, c2, c3 = st.columns([7, 1, 1])
+            c1.markdown(f"**{lst['name']}** — {lst['item_count']} varer")
+            if c2.button("Åpne", key=f"open_{lst['id']}", use_container_width=True):
+                st.session_state.active_list_id = lst["id"]
+                st.session_state.liste_resultater = None
+                st.rerun()
+            if c3.button("🗑️", key=f"del_{lst['id']}", use_container_width=True, help="Slett liste"):
+                db.delete_shopping_list(lst["id"])
+                st.rerun()
+
+    else:
+        lists = _user_lists()
+        list_info = next((l for l in lists if l["id"] == active_id), None)
+        if list_info is None:
+            st.session_state.active_list_id = None
+            st.rerun()
+
+        list_name = list_info["name"]
+
+        if st.button("← Tilbake til lister"):
+            st.session_state.active_list_id = None
+            st.session_state.liste_resultater = None
+            st.rerun()
+
+        st.title(f"🛒 {list_name}")
+
+        # Vis prissammenligning hvis tilgjengelig
+        if st.session_state.liste_resultater is not None:
+            if st.button("← Tilbake til varer"):
+                st.session_state.liste_resultater = None
+                st.rerun()
+            _show_liste_resultater()
+            return
+
+        items = db.get_shopping_list_items(active_id)
+
         if items:
-            st.warning(f"{store}: ingen treff for: {', '.join(items)}")
+            if st.button(
+                "🔍 Søk priser for alle varer", type="primary", use_container_width=True
+            ):
+                _search_list_prices(items)
+                st.rerun()
+
+        if not items:
+            st.info(
+                "Listen er tom. Legg til varer nedenfor, "
+                "eller søk etter produkter og velg denne listen."
+            )
+        else:
+            for item in items:
+                c1, c2, c3 = st.columns([7, 1, 1])
+                qty_str = f" × {item['quantity']}" if item.get("quantity", 1) > 1 else ""
+                note_str = f"  _{item['note']}_" if item.get("note") else ""
+                name_cap = item["original_name"].capitalize()
+                if item["checked"]:
+                    c1.markdown(f"~~{name_cap}{qty_str}{note_str}~~")
+                else:
+                    c1.markdown(f"{name_cap}{qty_str}{note_str}")
+                chk_lbl = "☑" if item["checked"] else "☐"
+                if c2.button(chk_lbl, key=f"chk_{item['id']}", use_container_width=True):
+                    db.toggle_item_checked(item["id"])
+                    st.rerun()
+                if c3.button("✕", key=f"rmv_{item['id']}", use_container_width=True):
+                    db.remove_shopping_list_item(item["id"])
+                    st.rerun()
+
+        # Legg til vare
+        st.divider()
+        st.subheader("Legg til vare")
+        with st.form(f"add_form_{active_id}", clear_on_submit=True):
+            ac1, ac2, ac3 = st.columns([5, 1, 2])
+            new_name = ac1.text_input("Varenavn", placeholder="f.eks. havregryn")
+            new_qty = ac2.number_input("Antall", min_value=1, value=1)
+            new_note = ac3.text_input("Merknad", placeholder="f.eks. 1,5% fett")
+            if st.form_submit_button("Legg til", type="primary") and new_name.strip():
+                db.add_to_shopping_list(
+                    active_id, new_name.strip(), quantity=int(new_qty), note=new_note or None
+                )
+                st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    c_pic, c_info = st.columns([1, 3])
+    with c_pic:
+        if _user.get("picture"):
+            st.image(_user["picture"], width=40)
+    with c_info:
+        st.write(f"**{_user['name']}**")
+        st.caption(f"`{_user['email']}`")
+
+    btn_cols = st.columns([1, 1])
+    if btn_cols[0].button("Logg ut", use_container_width=True):
+        auth.logout()
+        st.rerun()
+    if _is_admin:
+        lbl = "Skjul 🔧" if st.session_state.show_admin else "🔧 Admin"
+        if btn_cols[1].button(lbl, use_container_width=True, type="secondary"):
+            st.session_state.show_admin = not st.session_state.show_admin
+            st.rerun()
+
+    st.divider()
+
+    for _label, _key in [("🔍 Søk", "søk"), ("🛒 Handlelister", "handlelister")]:
+        _active = st.session_state.section == _key
+        if st.button(
+            _label,
+            use_container_width=True,
+            type="primary" if _active else "secondary",
+            key=f"nav_{_key}",
+        ):
+            st.session_state.section = _key
+            st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Hovedinnhold
+# ---------------------------------------------------------------------------
+
+if st.session_state.show_admin and _is_admin:
+    _admin_panel()
+    st.stop()
+
+if st.session_state.section == "søk":
+    _show_search()
+elif st.session_state.section == "handlelister":
+    _show_handlelister()

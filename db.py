@@ -652,6 +652,11 @@ def archive_shopping_list(list_id: int) -> None:
         )
 
 
+def remove_shopping_list_item(item_id: int) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM shopping_list_item WHERE id = ?", (item_id,))
+
+
 # ---------------------------------------------------------------------------
 # v2.0 — varslingsliste (watchlist, per bruker)
 # ---------------------------------------------------------------------------
