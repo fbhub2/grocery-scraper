@@ -4,35 +4,39 @@
 
 ---
 
-## ✅ STEG 6 ferdig — `feature/per-user-isolation` (mai 2026)
+## ✅ STEG 7 implementert — `feature/shopping-list` (mai 2026)
 
-Handleliste er nå isolert per bruker via `_list_name()` = `f"user_{_user_db_id}"`.
-Auth, admin-panel og alle bug-fixes merget til main og kjører i prod.
+Branch klar for test. Ikke merget til main ennå.
 
-**Prod-URL:** https://grocery-scraper-bitflow.streamlit.app/
+**Test manuelt:**
+1. `streamlit run app.py`
+2. Opprett en ny handleliste
+3. Søk etter en vare → "Legg i liste"-popover → velg liste + antall
+4. Gå til Handlelister → åpne lista → avhak varer, fjern varer
+5. Klikk "Søk priser for alle varer" → sjekk prissammenligning
 
 ---
 
-## Nå: `feature/shopping-list` (STEG 7)
+## Nå: `feature/watchlist` (STEG 8)
 
-Per spec — redesignet seleksjonsmodell, nye db-funksjoner, volum-velger.
+Varslingsliste — ⭐-knapp i søk, terskel-dialog, varslings-UI.
 
 ---
 
 ## Overordnet veikart
 
-| Steg | Branch                       | Avhenger av | Status      |
-|------|------------------------------|-------------|-------------|
-| 1    | `feature/db-foundation`      | —           | ✅ Ferdig    |
-| 2    | `feature/normalization`      | 1           | ✅ Ferdig    |
-| 3    | `feature/product-persistence`| 1+2         | ✅ Ferdig    |
-| 4    | `feature/price-fetch-task`   | 1+2+3       | ✅ Ferdig    |
-| 5    | `feature/google-auth`        | 1 + .env    | ✅ Ferdig    |
-| 6    | `feature/per-user-isolation` | 5           | ✅ Ferdig    |
-| 7    | `feature/shopping-list`      | 1+2+5+6     | ⏳ Neste     |
-| 8    | `feature/watchlist`          | 1+2+4+5+6   | 📋 Plan      |
-| 9    | `feature/price-history-ui`   | 1+3+4       | 📋 Plan      |
-| 10   | `feature/normalization-ui`   | 2+5+6       | 📋 Plan      |
-| —    | `fix/search-ux`              | —           | 📋 Plan      |
-| —    | `fix/price-baseline`         | —           | 📋 Plan      |
-| —    | `fix/price-arrow-semantics`  | —           | 📋 Plan      |
+| Steg | Branch                       | Status      |
+|------|------------------------------|-------------|
+| 1    | `feature/db-foundation`      | ✅ Ferdig    |
+| 2    | `feature/normalization`      | ✅ Ferdig    |
+| 3    | `feature/product-persistence`| ✅ Ferdig    |
+| 4    | `feature/price-fetch-task`   | ✅ Ferdig    |
+| 5    | `feature/google-auth`        | ✅ Ferdig    |
+| 6    | `feature/per-user-isolation` | ✅ Ferdig    |
+| 7    | `feature/shopping-list`      | ⏳ Test      |
+| 8    | `feature/watchlist`          | 📋 Plan      |
+| 9    | `feature/price-history-ui`   | 📋 Plan      |
+| 10   | `feature/normalization-ui`   | 📋 Plan      |
+| —    | `fix/search-ux`              | 📋 Plan      |
+| —    | `fix/price-baseline`         | 📋 Plan      |
+| —    | `fix/price-arrow-semantics`  | 📋 Plan      |

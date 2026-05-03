@@ -56,12 +56,13 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 
 ## 🔵 Planlagt (v2.2)
 
-### STEG 7 · `feature/shopping-list`
-- [ ] `db.py` — `create_shopping_list()`, `get_shopping_lists()`, `get_shopping_list_items()`
-- [ ] `db.py` — `add_to_shopping_list()`, `toggle_item_checked()`, `delete_shopping_list()`
-- [ ] `main.py` — redesignet seleksjonsmodell: gruppe-kort (IKKE checkbox-tabell)
-- [ ] Volum-velger + antall-velger i "Legg til"-dialog
-- [ ] Fikser ISSUE-05 og ISSUE-07
+### STEG 7 · `feature/shopping-list` ✅ mai 2026
+- [x] `db.py` — alle handleliste-funksjoner (fra STEG 1) + `remove_shopping_list_item()`
+- [x] `app.py` — sidebar navigasjon: Søk / Handlelister
+- [x] `app.py` — Handlelister-seksjon: oversikt, opprett/slett/åpne liste
+- [x] `app.py` — Åpen liste: varer med avhaking, antall, merknad, fjern
+- [x] `app.py` — "Søk priser for alle varer" → prissammenligning med optimal sum
+- [x] `app.py` — "Legg i liste"-popover i søk: velg liste + antall
 
 ### STEG 8 · `feature/watchlist`
 - [ ] `db.py` — `add_to_watchlist()`, `get_watchlist()`, `mark_watchlist_triggered()`
