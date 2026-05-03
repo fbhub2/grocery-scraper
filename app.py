@@ -352,8 +352,11 @@ def _search_list_prices(items: list[dict]) -> None:
         for item in items:
             vare = item["original_name"]
             qty = item.get("quantity", 1)
-            res, _ = run_search(normalize_search_term(vare), 3)
-            row: dict = {"Vare": vare.capitalize(), "_navn": vare, "Antall": qty}
+            note = item.get("note") or ""
+            search_query = normalize_search_term(f"{vare} {note}".strip() if note else vare)
+            vare_label = f"{vare.capitalize()} ({note})" if note else vare.capitalize()
+            res, _ = run_search(search_query, 3)
+            row: dict = {"Vare": vare_label, "_navn": vare, "Antall": qty}
             for store_name in STORES:
                 prods = res.get(store_name, [])
                 best = _best_product(prods, None)
@@ -411,8 +414,8 @@ def _show_liste_resultater() -> None:
         display_row = {k: v for k, v in row.items() if k != "_navn"}
         for s in STORES:
             trend = db.get_price_trend(product_name, s)
-            if trend:
-                symbol = "↑" if trend["delta"] > 0.01 else ("↓" if trend["delta"] < -0.01 else "→")
+            if trend and abs(trend["delta"]) > 0.01:
+                symbol = "↑" if trend["delta"] > 0.01 else "↓"
                 display_row[f"{s} trend"] = f"{symbol} {abs(trend['delta']):.2f} kr"
             else:
                 display_row[f"{s} trend"] = ""
