@@ -44,12 +44,13 @@ mittprosjekt/
 - `dev` — aktiv utviklingsbranch. All ny kode samles her.
 - `feature/*` og `bugfix/*` — kortlivede branches, merges inn i `dev` (ikke main).
 
-### Regler
+### Regler — VIKTIG
 - Før du starter arbeid: sjekk at vi er på `dev` eller en feature-branch
 - Hvis vi er på `main`: bytt til `dev` før du gjør noe som helst
-- Commit og push går alltid til current branch
-- Spør eksplisitt før du merger noe som helst til `dev`
-- Spør alltid før du merger til `main` — dette er en bevisst release-beslutning
+- **ALDRI merge noe som helst uten at brukeren eksplisitt sier "ja, merge"** — ikke "push til X" eller "test på X" er godkjenning for merge
+- **ALDRI foreslå merge til `main`** — det er en bevisst release-beslutning brukeren tar selv, uten påminnelse
+- Etter en commit: push til **current branch**, så STOPP og spør hva brukeren vil gjøre
+- Ikke kjed flere git-operasjoner i én kommando uten eksplisitt godkjenning (f.eks. merge + push er to separate beslutninger)
 
 ## Viktig om datamodell
 - Handleliste (v2.0): `db.get_shopping_lists(user_id)` + `db.get_shopping_list_items(list_id)` — ikke v1.x `get_list()`
