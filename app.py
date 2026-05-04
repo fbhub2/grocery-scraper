@@ -84,6 +84,7 @@ _DEFAULTS: dict = {
     "liste_resultater": None,
     "show_admin": False,
     "wl_add_name": None,
+    "bulk_add_feedback": None,
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -330,7 +331,18 @@ def _show_search() -> None:
             submitted = st.form_submit_button("Søk", type="primary", use_container_width=True)
         limit = 5
 
+    if st.session_state.bulk_add_feedback:
+        fb = st.session_state.bulk_add_feedback
+        fc, bc = st.columns([3, 1])
+        fc.success(f"✓ {fb['count']} vare(r) lagt til i **{fb['list_name']}**")
+        if bc.button("Åpne liste →", use_container_width=True):
+            st.session_state.section = "handlelister"
+            st.session_state.active_list_id = fb["list_id"]
+            st.session_state.bulk_add_feedback = None
+            st.rerun()
+
     if submitted:
+        st.session_state.bulk_add_feedback = None
         if not query.strip():
             st.warning("Skriv inn et søkeord.")
             st.stop()
@@ -412,10 +424,15 @@ def _show_search() -> None:
                         lid = db.create_shopping_list(_user_db_id, target or "Handleliste")
                     else:
                         lid = next(l["id"] for l in lists if l["name"] == target)
+                    added = 0
                     for row_idx in selected_rows:
                         pname = df.iloc[row_idx]["Produkt"]
                         if pname and pname.lower() not in already_added:
                             db.add_to_shopping_list(lid, pname)
+                            added += 1
+                    st.session_state.bulk_add_feedback = {
+                        "list_name": target, "list_id": lid, "count": added
+                    }
                     st.rerun()
 
     st.divider()
