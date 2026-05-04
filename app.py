@@ -460,11 +460,16 @@ def _show_search() -> None:
     st.divider()
 
     # --- Per-butikk kolonner ---
+    _STORE_COLORS = {"Oda": "#005b96", "Meny": "#c0021b", "OBS 📰": "#d97706"}
     stores_to_show = list(results.keys())
     cols = st.columns(len(stores_to_show))
     for col, store in zip(cols, stores_to_show):
         with col:
-            st.subheader(store)
+            color = _STORE_COLORS.get(store, "#444444")
+            st.markdown(
+                f'<h3 style="color:{color};margin-bottom:0.25rem">{store}</h3>',
+                unsafe_allow_html=True,
+            )
             if store in errors:
                 st.error(f"Feil: {errors[store]}")
             elif not results.get(store):
@@ -479,35 +484,33 @@ def _show_search() -> None:
                     url = p.get("url") if not is_obs else None
                     valid_to = p.get("valid_to") if is_obs else None
                     image_url = p.get("image_url")
-
-                    price_line = f"kr {price:.2f}"
-                    if unit_price:
-                        price_line += f"  _{unit_price}_"
-
-                    if image_url and isinstance(image_url, str):
-                        st.image(image_url, width=80)
-                    st.markdown(f"**{name}**")
-                    if variant:
-                        st.caption(variant)
-                    st.markdown(price_line)
-
-                    if is_obs and valid_to:
-                        from datetime import date as _date
-                        if valid_to < _date.today().isoformat():
-                            st.caption("⏰ Utløpt")
-                        else:
-                            st.caption(f"✅ Gyldig til {valid_to}")
-                    if url:
-                        st.markdown(f"[Se produkt]({url})")
-
                     wl_name = f"{name} {variant}".strip() if variant else name
-                    if name and name.lower() in already_added:
-                        st.caption("✓ På handlelisten")
-                    elif name:
-                        _legg_til_popover(name, f"{store}_{i}")
-                    if name and not is_obs:
-                        _varsle_meg_popover(wl_name, price or 0.0, f"{store}_{i}")
-                    st.divider()
+
+                    with st.container(border=True):
+                        if image_url and isinstance(image_url, str):
+                            st.image(image_url, width=72)
+                        st.markdown(f"**{name}**")
+                        if variant:
+                            st.caption(variant)
+                        st.markdown(f"### kr {price:.2f}")
+                        if unit_price:
+                            st.badge(unit_price, color="blue")
+
+                        if is_obs and valid_to:
+                            from datetime import date as _date
+                            if valid_to < _date.today().isoformat():
+                                st.caption("⏰ Utløpt")
+                            else:
+                                st.caption(f"✅ Gyldig til {valid_to}")
+                        if url:
+                            st.markdown(f"[Se produkt]({url})")
+
+                        if name and name.lower() in already_added:
+                            st.caption("✓ På handlelisten")
+                        elif name:
+                            _legg_til_popover(name, f"{store}_{i}")
+                        if name and not is_obs:
+                            _varsle_meg_popover(wl_name, price or 0.0, f"{store}_{i}")
 
 
 # ---------------------------------------------------------------------------
