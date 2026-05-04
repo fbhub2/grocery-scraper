@@ -83,6 +83,7 @@ _DEFAULTS: dict = {
     "last_query": "",
     "liste_resultater": None,
     "show_admin": False,
+    "wl_add_name": None,
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -157,6 +158,136 @@ def _admin_panel() -> None:
             "SELECT COUNT(*) FROM normal WHERE auto_name IS NULL"
         ).fetchone()[0])
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Varslingsliste-popover og seksjon
+# ---------------------------------------------------------------------------
+
+def _varsle_meg_popover(name: str, price: float, key_suffix: str) -> None:
+    on_wl = db.is_on_watchlist(_user_db_id, name)
+    label = "⭐ Varslet" if on_wl else "⭐ Varsle meg"
+    with st.popover(label):
+        if on_wl:
+            st.caption(f"**{name.capitalize()}** er allerede i varslingslisten.")
+            if st.button("Fjern varsel", key=f"wl_rm_s_{key_suffix}"):
+                db.remove_from_watchlist(_user_db_id, name)
+                st.rerun()
+        else:
+            st.markdown(f"**Varsle meg om {name.capitalize()} når...**")
+            options = [
+                "Prisen er på tilbud (anbefalt)",
+                f"Prisen er under X kr  (nå: {price:.0f} kr)",
+                "Prisen er mer enn X% billigere enn snitt",
+            ]
+            choice = st.radio("Terskel", options, key=f"wl_type_{key_suffix}", label_visibility="collapsed")
+            threshold_value = None
+            if "under X kr" in choice:
+                threshold_value = st.number_input(
+                    "Grensepris (kr)", min_value=0.1, value=round(price * 0.9, 1),
+                    key=f"wl_val_{key_suffix}"
+                )
+            elif "X%" in choice:
+                threshold_value = st.number_input(
+                    "Prosent lavere", min_value=1, max_value=80, value=10,
+                    key=f"wl_pct_{key_suffix}"
+                )
+            type_map = {
+                options[0]: "sale",
+                options[1]: "absolute",
+                options[2]: "relative",
+            }
+            if st.button("Lagre varsel", key=f"wl_save_{key_suffix}", type="primary"):
+                db.add_to_watchlist(_user_db_id, name, type_map[choice], threshold_value)
+                st.success("✓ Varsel lagret")
+
+
+def _show_varslingsliste() -> None:
+    watchlist = db.get_watchlist(_user_db_id)
+
+    triggered = [w for w in watchlist if w["status"] == "triggered"]
+    waiting   = [w for w in watchlist if w["status"] == "waiting"]
+    ignored   = [w for w in watchlist if w["status"] not in ("triggered", "waiting")]
+
+    st.title("⭐ Varslingsliste")
+
+    # Legg til vare fra varslingslisten i en handleliste
+    if st.session_state.wl_add_name:
+        pname = st.session_state.wl_add_name
+        st.info(f"Legg **{pname.capitalize()}** i en handleliste:")
+        lists = _user_lists()
+        if not lists:
+            nl = st.text_input("Ny liste", value="Handleliste", key="wl_new_list")
+            if st.button("Opprett og legg til", type="primary"):
+                lid = db.create_shopping_list(_user_db_id, nl.strip() or "Handleliste")
+                db.add_to_shopping_list(lid, pname)
+                st.session_state.wl_add_name = None
+                st.rerun()
+        else:
+            chosen = st.selectbox("Velg liste", [l["name"] for l in lists], key="wl_list_sel")
+            if st.button("Legg til i liste", type="primary"):
+                lid = next(l["id"] for l in lists if l["name"] == chosen)
+                db.add_to_shopping_list(lid, pname)
+                st.session_state.wl_add_name = None
+                st.rerun()
+        if st.button("Avbryt"):
+            st.session_state.wl_add_name = None
+            st.rerun()
+        st.stop()
+
+    if not watchlist:
+        st.info("Ingen varsler ennå. Søk etter et produkt og klikk ⭐ Varsle meg.")
+        return
+
+    def _threshold_desc(w: dict) -> str:
+        t, v = w["threshold_type"], w["threshold_value"]
+        if t == "absolute":
+            return f"under {v:.0f} kr"
+        if t == "relative":
+            return f"> {v:.0f}% billigere enn snitt"
+        return "på tilbud"
+
+    if triggered:
+        st.subheader(f"🟢 Truffet ({len(triggered)})")
+        for w in triggered:
+            c1, c2, c3 = st.columns([5, 2, 2])
+            c1.markdown(
+                f"**{w['original_name'].capitalize()}**  \n"
+                f"_{_threshold_desc(w)}_"
+            )
+            c2.markdown(
+                f"**{w['triggered_price']:.2f} kr**  \n"
+                f"{w['triggered_store']}"
+            )
+            with c3:
+                if st.button("➕ Legg i liste", key=f"wl_trig_add_{w['id']}"):
+                    st.session_state.wl_add_name = w["original_name"]
+                    db.reset_watchlist_item(w["id"])
+                    st.rerun()
+                if st.button("Ignorer", key=f"wl_trig_ign_{w['id']}"):
+                    db.reset_watchlist_item(w["id"])
+                    st.rerun()
+
+    if waiting:
+        st.subheader(f"🟡 Venter ({len(waiting)})")
+        for w in waiting:
+            c1, c2 = st.columns([8, 1])
+            c1.markdown(
+                f"**{w['original_name'].capitalize()}**  \n"
+                f"_{_threshold_desc(w)}_"
+            )
+            if c2.button("✕", key=f"wl_wait_rm_{w['id']}", use_container_width=True):
+                db.remove_from_watchlist(_user_db_id, w["original_name"])
+                st.rerun()
+
+    if ignored:
+        with st.expander(f"⚫ Inaktive ({len(ignored)})"):
+            for w in ignored:
+                c1, c2 = st.columns([8, 1])
+                c1.markdown(f"**{w['original_name'].capitalize()}**")
+                if c2.button("✕", key=f"wl_ign_rm_{w['id']}", use_container_width=True):
+                    db.remove_from_watchlist(_user_db_id, w["original_name"])
+                    st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -335,6 +466,8 @@ def _show_search() -> None:
                         st.caption("✓ På handlelisten")
                     elif name:
                         _legg_til_popover(name, f"{store}_{i}")
+                    if name and not is_obs:
+                        _varsle_meg_popover(name, price or 0.0, f"{store}_{i}")
                     st.divider()
 
 
@@ -588,7 +721,13 @@ with st.sidebar:
 
     st.divider()
 
-    for _label, _key in [("🔍 Søk", "søk"), ("🛒 Handlelister", "handlelister")]:
+    _wl_triggered = sum(1 for w in db.get_watchlist(_user_db_id) if w["status"] == "triggered")
+    _nav_items = [
+        ("🔍 Søk", "søk"),
+        ("🛒 Handlelister", "handlelister"),
+        (f"⭐ Varslingsliste{f' ({_wl_triggered})' if _wl_triggered else ''}", "varslingsliste"),
+    ]
+    for _label, _key in _nav_items:
         _active = st.session_state.section == _key
         if st.button(
             _label,
@@ -612,3 +751,5 @@ if st.session_state.section == "søk":
     _show_search()
 elif st.session_state.section == "handlelister":
     _show_handlelister()
+elif st.session_state.section == "varslingsliste":
+    _show_varslingsliste()
