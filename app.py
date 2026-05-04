@@ -697,6 +697,77 @@ def _show_handlelister() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Seksjon: Prishistorikk
+# ---------------------------------------------------------------------------
+
+def _show_prishistorikk() -> None:
+    st.title("📈 Prishistorikk")
+
+    products = db.get_products_with_history()
+    if not products:
+        st.info(
+            "Ingen prishistorikk ennå. "
+            "Bruk **Søk priser for alle varer** i Handlelister for å samle prisdata."
+        )
+        return
+
+    c1, c2 = st.columns([4, 2])
+    with c1:
+        selected = st.selectbox("Velg produkt", products, key="ph_product")
+    with c2:
+        days = st.slider("Dager tilbake", 7, 365, 30, key="ph_days")
+
+    if not selected:
+        return
+
+    history = db.get_price_history(selected, days=days)
+    if not history:
+        st.info(f"Ingen data for **{selected}** de siste {days} dagene.")
+        return
+
+    df = pd.DataFrame(history)
+    df["recorded_at"] = pd.to_datetime(df["recorded_at"])
+
+    stores_in_data = sorted(df["store"].unique())
+
+    # Linjediagram — én linje per butikk
+    df_pivot = (
+        df.pivot_table(index="recorded_at", columns="store", values="price", aggfunc="mean")
+        .sort_index()
+    )
+    st.subheader(f"{selected.capitalize()}")
+    st.line_chart(df_pivot, height=300)
+
+    # Statistikk per butikk
+    stat_cols = st.columns(len(stores_in_data))
+    for col, store in zip(stat_cols, stores_in_data):
+        sdf = df[df["store"] == store].sort_values("recorded_at")
+        latest_price = sdf.iloc[-1]["price"]
+        min_p = sdf["price"].min()
+        max_p = sdf["price"].max()
+        delta = latest_price - sdf.iloc[-2]["price"] if len(sdf) >= 2 else None
+        col.metric(
+            store,
+            f"kr {latest_price:.2f}",
+            delta=f"{delta:+.2f} kr" if delta is not None else None,
+            delta_color="inverse",
+            help=f"Min: {min_p:.2f} kr  /  Maks: {max_p:.2f} kr  /  {len(sdf)} målinger",
+        )
+
+    # Rådata-tabell (collapsable)
+    with st.expander("Vis rådata"):
+        df_show = df[["recorded_at", "store", "price", "unit_price"]].copy()
+        df_show.columns = ["Tidspunkt", "Butikk", "Pris (kr)", "Per enhet"]
+        df_show = df_show.sort_values("Tidspunkt", ascending=False).reset_index(drop=True)
+        st.dataframe(
+            df_show,
+            column_config={"Pris (kr)": st.column_config.NumberColumn(format="%.2f kr")},
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
 
@@ -726,6 +797,7 @@ with st.sidebar:
         ("🔍 Søk", "søk"),
         ("🛒 Handlelister", "handlelister"),
         (f"⭐ Varslingsliste{f' ({_wl_triggered})' if _wl_triggered else ''}", "varslingsliste"),
+        ("📈 Prishistorikk", "prishistorikk"),
     ]
     for _label, _key in _nav_items:
         _active = st.session_state.section == _key
@@ -753,3 +825,5 @@ elif st.session_state.section == "handlelister":
     _show_handlelister()
 elif st.session_state.section == "varslingsliste":
     _show_varslingsliste()
+elif st.session_state.section == "prishistorikk":
+    _show_prishistorikk()

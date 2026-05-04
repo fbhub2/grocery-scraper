@@ -4,22 +4,22 @@
 
 ---
 
-## ✅ STEG 7 implementert — `feature/shopping-list` (mai 2026)
+## ✅ STEG 9 implementert — `feature/price-history-ui` (mai 2026)
 
-Branch klar for test. Ikke merget til main ennå.
+Branch klar for test. Ikke merget til dev/main ennå.
 
 **Test manuelt:**
 1. `streamlit run app.py`
-2. Opprett en ny handleliste
-3. Søk etter en vare → "Legg i liste"-popover → velg liste + antall
-4. Gå til Handlelister → åpne lista → avhak varer, fjern varer
-5. Klikk "Søk priser for alle varer" → sjekk prissammenligning
+2. Søk priser for en handleliste (for å generere historikkdata)
+3. Gå til 📈 Prishistorikk i sidebar
+4. Velg et produkt → sjekk linjediagram og statistikk-metrics
+5. Endre "Dager tilbake"-slider
 
 ---
 
-## Nå: `feature/watchlist` (STEG 8)
+## Nå: `feature/normalization-ui` (STEG 10)
 
-Varslingsliste — ⭐-knapp i søk, terskel-dialog, varslings-UI.
+Normalisering-tab — vis original_name | auto_name | custom_name (editerbar).
 
 ---
 
@@ -33,9 +33,9 @@ Varslingsliste — ⭐-knapp i søk, terskel-dialog, varslings-UI.
 | 4    | `feature/price-fetch-task`   | ✅ Ferdig    |
 | 5    | `feature/google-auth`        | ✅ Ferdig    |
 | 6    | `feature/per-user-isolation` | ✅ Ferdig    |
-| 7    | `feature/shopping-list`      | ⏳ Test      |
-| 8    | `feature/watchlist`          | 📋 Plan      |
-| 9    | `feature/price-history-ui`   | 📋 Plan      |
+| 7    | `feature/shopping-list`      | ✅ Ferdig    |
+| 8    | `feature/watchlist`          | ✅ Ferdig    |
+| 9    | `feature/price-history-ui`   | ⏳ Test      |
 | 10   | `feature/normalization-ui`   | 📋 Plan      |
 | —    | `fix/search-ux`              | 📋 Plan      |
 | —    | `fix/price-baseline`         | 📋 Plan      |
