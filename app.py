@@ -35,13 +35,16 @@ def _check_watchlist_on_search(results: dict) -> None:
             continue
         for p in products:
             name = p.get("name") if isinstance(p, dict) else None
+            variant = p.get("variant") if isinstance(p, dict) else None
             price = p.get("price") if isinstance(p, dict) else None
             if not name or price is None:
                 continue
-            wl_items = db.get_watchlist_by_name(name)
+            # Sjekk både med og uten variant — watchlist kan være lagret begge veier
+            wl_name = f"{name} {variant}".strip() if variant else name
+            wl_items = db.get_watchlist_by_name(wl_name) or db.get_watchlist_by_name(name)
             if not wl_items:
                 continue
-            avg = db.get_avg_price_by_name(name, store, days=30) or price
+            avg = db.get_avg_price_by_name(wl_name, store, days=30) or price
             for item in wl_items:
                 if check_threshold(item, price, avg):
                     db.mark_watchlist_triggered(item["id"], price, store)
