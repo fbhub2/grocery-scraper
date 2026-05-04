@@ -322,14 +322,13 @@ def _show_search() -> None:
     st.title("🔍 Søk")
 
     with st.form("search_form"):
-        col1, col2, col3 = st.columns([5, 1, 1])
+        col1, col2 = st.columns([6, 1])
         with col1:
             query = st.text_input("Søk etter produkt", placeholder="f.eks. havregryn, smør, egg...")
         with col2:
-            limit = st.number_input("Antall", min_value=1, max_value=20, value=5)
-        with col3:
             st.write("")
             submitted = st.form_submit_button("Søk", type="primary", use_container_width=True)
+        limit = 5
 
     if submitted:
         if not query.strip():
@@ -462,12 +461,13 @@ def _show_search() -> None:
                     if url:
                         st.markdown(f"[Se produkt]({url})")
 
+                    wl_name = f"{name} {variant}".strip() if variant else name
                     if name and name.lower() in already_added:
                         st.caption("✓ På handlelisten")
                     elif name:
                         _legg_til_popover(name, f"{store}_{i}")
                     if name and not is_obs:
-                        _varsle_meg_popover(name, price or 0.0, f"{store}_{i}")
+                        _varsle_meg_popover(wl_name, price or 0.0, f"{store}_{i}")
                     st.divider()
 
 
@@ -548,8 +548,10 @@ def _show_liste_resultater() -> None:
         for s in STORES:
             trend = db.get_price_trend(product_name, s)
             if trend and abs(trend["delta"]) > 0.01:
-                symbol = "↑" if trend["delta"] > 0.01 else "↓"
-                display_row[f"{s} trend"] = f"{symbol} {abs(trend['delta']):.2f} kr"
+                if trend["delta"] > 0:
+                    display_row[f"{s} trend"] = f"🔴 ↑ {trend['delta']:+.2f} kr"
+                else:
+                    display_row[f"{s} trend"] = f"🟢 ↓ {trend['delta']:+.2f} kr"
             else:
                 display_row[f"{s} trend"] = ""
         rows_display.append({**display_row, "Billigst": best})
@@ -726,11 +728,11 @@ def _show_prishistorikk() -> None:
         return
 
     df = pd.DataFrame(history)
-    df["recorded_at"] = pd.to_datetime(df["recorded_at"])
+    df["recorded_at"] = pd.to_datetime(df["recorded_at"]).dt.floor("D")
 
     stores_in_data = sorted(df["store"].unique())
 
-    # Linjediagram — én linje per butikk
+    # Linjediagram — én linje per butikk, aggregert per dag
     df_pivot = (
         df.pivot_table(index="recorded_at", columns="store", values="price", aggfunc="mean")
         .sort_index()
