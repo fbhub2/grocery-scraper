@@ -37,19 +37,25 @@ mittprosjekt/
 2. Sjekk hvilke filer som faktisk finnes (`Get-ChildItem -Recurse`)
 3. Ikke anta at en feature er implementert — verifiser i koden
 
-## Git-workflow
-```powershell
-git checkout -b feature/<navn>   # alltid branch først
-claude "<oppgave>"
-git diff main
-git merge feature/<navn>
-```
+## Git-arbeidsflyt
+
+### Branch-struktur
+- `main` — produksjon, kjøres av Streamlit Cloud. **ALDRI** commit eller merge hit direkte.
+- `dev` — aktiv utviklingsbranch. All ny kode samles her.
+- `feature/*` og `bugfix/*` — kortlivede branches, merges inn i `dev` (ikke main).
+
+### Regler
+- Før du starter arbeid: sjekk at vi er på `dev` eller en feature-branch
+- Hvis vi er på `main`: bytt til `dev` før du gjør noe som helst
+- Commit og push går alltid til current branch
+- Spør eksplisitt før du merger noe som helst til `dev`
+- Spør alltid før du merger til `main` — dette er en bevisst release-beslutning
 
 ## Viktig om datamodell
-- `handleliste` i Streamlit session state er `list[dict]` (fulle db-rader) — **ikke** `list[str]`
-- `db.remove_item()` tar `item_id=` for presis sletting; faller tilbake på produktnavn
-- OBS-data importeres via `import_obs_catalog` MCP-tool (Claude vision parser PDF/bilde) — ikke live scraping
-- `split_name_variant()` beholder prosent-tokens (0,5%, 3,5%) i produktnavnet
+- Handleliste (v2.0): `db.get_shopping_lists(user_id)` + `db.get_shopping_list_items(list_id)` — ikke v1.x `get_list()`
+- `_list_name()` i app.py er v1.x-relikt (brukt av MCP) — ny UI bruker v2.0 `shopping_list`-tabellen
+- `split_name_variant()` beholder prosent-tokens (0,5%, 3,5%) i produktnavnet — prosent er produkttype, ikke mengde
+- OBS-data importeres via `import_obs_catalog` MCP-tool — ikke live scraping
 
 ## Kjente gotchas
 - Ikke godkjenn `/init`-diff uten å lese den — `/init` har fjernet viktige seksjoner tidligere
