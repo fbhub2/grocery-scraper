@@ -275,6 +275,13 @@ def get_price_history(product_name: str, store: str = None, days: int = 90) -> l
     return [dict(r) for r in rows]
 
 
+def get_avg_price_by_name(product_name: str, store: str, days: int = 30) -> float | None:
+    rows = get_price_history(product_name, store, days=days)
+    if not rows:
+        return None
+    return sum(r["price"] for r in rows) / len(rows)
+
+
 def get_price_trend(product_name: str, store: str) -> dict | None:
     with _conn() as conn:
         rows = conn.execute(

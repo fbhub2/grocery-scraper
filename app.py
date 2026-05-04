@@ -10,7 +10,7 @@ import os
 import sqlite3
 import db
 import auth
-from normalize import normalize_search_term
+from normalize import normalize_search_term, check_threshold
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
@@ -28,6 +28,24 @@ STORES = {"Oda": oda_search, "Meny": meny_search}
 # ---------------------------------------------------------------------------
 # Hjelpefunksjoner
 # ---------------------------------------------------------------------------
+
+def _check_watchlist_on_search(results: dict) -> None:
+    for store, products in results.items():
+        if store == "OBS 📰":
+            continue
+        for p in products:
+            name = p.get("name") if isinstance(p, dict) else None
+            price = p.get("price") if isinstance(p, dict) else None
+            if not name or price is None:
+                continue
+            wl_items = db.get_watchlist_by_name(name)
+            if not wl_items:
+                continue
+            avg = db.get_avg_price_by_name(name, store, days=30) or price
+            for item in wl_items:
+                if check_threshold(item, price, avg):
+                    db.mark_watchlist_triggered(item["id"], price, store)
+
 
 def _best_product(products: list, preferred_volume: str | None):
     if not products:
@@ -354,6 +372,7 @@ def _show_search() -> None:
                 converted[store] = products
             else:
                 converted[store] = [p.to_dict() if hasattr(p, "to_dict") else p for p in products]
+        _check_watchlist_on_search(converted)
         st.session_state.search_results = converted
         st.session_state.search_errors = errors
         st.session_state.last_query = query.strip()
