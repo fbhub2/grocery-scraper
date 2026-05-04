@@ -139,7 +139,10 @@ def _admin_panel() -> None:
     st.divider()
     st.subheader("Brukere")
     udf = _adf("SELECT id, email, name, created_at FROM user ORDER BY created_at DESC")
-    st.dataframe(udf, use_container_width=True, hide_index=True) if not udf.empty else st.caption("Ingen")
+    if not udf.empty:
+        st.dataframe(udf, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Ingen")
 
     st.subheader("Handlelister")
     sldf = _adf(
@@ -150,7 +153,10 @@ def _admin_panel() -> None:
            WHERE sl.archived = 0
            GROUP BY sl.id ORDER BY sl.created_at DESC"""
     )
-    st.dataframe(sldf, use_container_width=True, hide_index=True) if not sldf.empty else st.caption("Ingen")
+    if not sldf.empty:
+        st.dataframe(sldf, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Ingen")
 
     st.divider()
     st.subheader("Rådata")
