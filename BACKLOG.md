@@ -64,11 +64,12 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] `app.py` — "Søk priser for alle varer" → prissammenligning med optimal sum
 - [x] `app.py` — "Legg i liste"-popover i søk: velg liste + antall
 
-### STEG 8 · `feature/watchlist`
-- [ ] `db.py` — `add_to_watchlist()`, `get_watchlist()`, `mark_watchlist_triggered()`
-- [ ] `tasks.py` — watchlist-sjekk i `run_price_fetch()`
-- [ ] `main.py` — varslingsliste UI med fargestatus (🟡🟢⚫)
-- [ ] ⭐-knapp + terskel-dialog
+### STEG 8 · `feature/watchlist` ✅ mai 2026
+- [x] `db.py` — alle watchlist-funksjoner (fra STEG 1), `tasks.py` terskel-sjekk (fra STEG 4)
+- [x] `app.py` — ⭐ Varsle meg-popover i søkeresultater: terskeltype + verdi
+- [x] `app.py` — Varslingsliste-seksjon: 🟢 truffet / 🟡 venter / ⚫ inaktive
+- [x] `app.py` — Truffet-handling: Legg i liste + Ignorer (reset til venter)
+- [x] Sidebar-nav viser antall truffet varsler som badge
 
 ### STEG 9 · `feature/price-history-ui`
 - [ ] `db.py` — `get_price_history_v2(product_id)`
