@@ -86,9 +86,9 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] **`fix/admin-view`** — Admin-panel inline i app.py, admin-knapp skjult for ikke-admin, email ikke mailto, OBS-seksjon fjernet
 - [x] **`fix/streamlit-cloud-auth`** — `auth.py` leser fra `st.secrets` som fallback, `.strip()` på alle OAuth-verdier
 - [x] **`fix/scraper-dedup`** — `seen_ids`-dedup i Oda og Meny scrapers
-- [ ] **`fix/search-ux`** (ISSUE-02) — Fjern antall-felt fra søkeskjema, flytt til "Legg til"-dialog
+- [x] **`fix/search-ux`** (ISSUE-02) — Fjern antall-felt fra søkeskjema, hardkodet limit=5
 - [ ] **`fix/price-baseline`** (ISSUE-03) — Baseline per product_id+store_id, aldri blande volum
-- [ ] **`fix/price-arrow-semantics`** (ISSUE-06) — ↑=dyrere(rødt), ↓=billigere(grønt)
+- [x] **`fix/price-arrow-semantics`** (ISSUE-06) — 🔴 ↑ = dyrere, 🟢 ↓ = billigere
 
 ---
 
