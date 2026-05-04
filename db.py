@@ -657,6 +657,15 @@ def remove_shopping_list_item(item_id: int) -> None:
         conn.execute("DELETE FROM shopping_list_item WHERE id = ?", (item_id,))
 
 
+def get_products_with_history() -> list[str]:
+    """Unike produktnavn som har prishistorikk, sortert alfabetisk."""
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT product_name FROM price_history ORDER BY product_name"
+        ).fetchall()
+    return [r["product_name"] for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # v2.0 — varslingsliste (watchlist, per bruker)
 # ---------------------------------------------------------------------------

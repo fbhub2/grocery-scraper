@@ -71,9 +71,10 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] `app.py` — Truffet-handling: Legg i liste + Ignorer (reset til venter)
 - [x] Sidebar-nav viser antall truffet varsler som badge
 
-### STEG 9 · `feature/price-history-ui`
-- [ ] `db.py` — `get_price_history_v2(product_id)`
-- [ ] `main.py` — `st.line_chart()` per produkt, én linje per butikk
+### STEG 9 · `feature/price-history-ui` ✅ mai 2026
+- [x] `db.py` — `get_products_with_history()`, `get_price_history()` (bruker v1.x `price_history`)
+- [x] `app.py` — `_show_prishistorikk()`: selectbox, slider, linjediagram per butikk, statistikk-metrics, rådata-tabell
+- [x] Sidebar-nav + routing koblet inn
 
 ### STEG 10 · `feature/normalization-ui`
 - [ ] `main.py` — "Normalisering"-tab: original_name | auto_name | custom_name (editerbar)
