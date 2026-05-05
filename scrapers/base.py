@@ -37,6 +37,8 @@ class Product:
     url: Optional[str] = None
     variant: Optional[str] = None
     image_url: Optional[str] = None
+    ean: Optional[str] = None
+    store_name: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)

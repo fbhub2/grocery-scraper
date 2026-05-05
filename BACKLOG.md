@@ -76,6 +76,14 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] `app.py` — `_show_prishistorikk()`: selectbox, slider, linjediagram per butikk, statistikk-metrics, rådata-tabell
 - [x] Sidebar-nav + routing koblet inn
 
+### STEG 11 · `feature/kassal-integration` ✅ mai 2026
+- [x] `scrapers/kassal.py` — Kassal.app API-scraper (graceful fallback uten nøkkel)
+- [x] `scrapers/base.py` — `ean` og `store_name` felt på Product
+- [x] `db.py` — `ean`-kolonne i `price_history`, `get_market_avg()`
+- [x] `app.py` — "Andre butikker via Kassal"-ekspander i søk
+- [x] `app.py` — Markedspris-badge på produktkort ("X% under/over snitt")
+- [x] `app.py` — "Optimal handleplan" i handleliste-resultater
+
 ### STEG 10 · `feature/normalization-ui` ✅ mai 2026
 - [x] `db.py` — `list_normals_with_custom(user_id, filter)` — join normal + user_normal
 - [x] `app.py` — `_show_normalisering()`: filter, st.data_editor med Original | Auto | Ditt navn

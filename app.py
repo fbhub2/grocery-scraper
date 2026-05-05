@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).parent))
 from scrapers import oda_search, meny_search
+from scrapers.kassal import search as kassal_search, is_configured as kassal_configured
 import os
 import sqlite3
 import db
@@ -80,6 +81,35 @@ def run_search(query: str, limit: int) -> tuple[dict, dict]:
     return results, errors
 
 
+def run_kassal_search(query: str, limit: int = 15) -> dict[str, list]:
+    """Hent resultater fra Kassal.app gruppert per butikknavn. Tom dict hvis ikke konfigurert."""
+    if not kassal_configured():
+        return {}
+    products = kassal_search(query, limit=limit)
+    grouped: dict[str, list] = {}
+    for p in products:
+        key = p.store_name or "Kassal"
+        grouped.setdefault(key, []).append(p.to_dict())
+    return grouped
+
+
+def _market_badge(price: float, all_prices: list[float]) -> str | None:
+    """Returner badge-tekst hvis prisen avviker >5% fra gjennomsnittet."""
+    if len(all_prices) < 2:
+        return None
+    avg = sum(all_prices) / len(all_prices)
+    if avg == 0:
+        return None
+    pct = (price - avg) / avg * 100
+    if pct < -10:
+        return f"🟢 {abs(pct):.0f}% under snitt"
+    if pct < -5:
+        return f"🟢 {abs(pct):.0f}% under snitt"
+    if pct > 10:
+        return f"🔴 {pct:.0f}% over snitt"
+    return None
+
+
 def _user_lists() -> list[dict]:
     return db.get_shopping_lists(_user_db_id)
 
@@ -106,6 +136,7 @@ _DEFAULTS: dict = {
     "show_admin": False,
     "wl_add_name": None,
     "bulk_add_feedback": None,
+    "kassal_results": {},
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -375,6 +406,7 @@ def _show_search() -> None:
             st.stop()
         with st.spinner(f'Søker etter "{query.strip()}" ...'):
             results, errors = run_search(query.strip(), int(limit))
+            kassal_results = run_kassal_search(query.strip())
         converted: dict = {}
         for store, products in results.items():
             if store == "OBS 📰":
@@ -385,6 +417,7 @@ def _show_search() -> None:
         st.session_state.search_results = converted
         st.session_state.search_errors = errors
         st.session_state.last_query = query.strip()
+        st.session_state.kassal_results = kassal_results
 
     if st.session_state.search_results is None:
         return
@@ -465,6 +498,12 @@ def _show_search() -> None:
 
     st.divider()
 
+    # Samle alle priser for markedspris-kontekst
+    _all_search_prices: list[float] = [
+        p.get("price") for prods in results.values()
+        for p in prods if isinstance(p, dict) and p.get("price") is not None
+    ]
+
     # --- Per-butikk kolonner ---
     _STORE_COLORS = {"Oda": "#005b96", "Meny": "#c0021b", "OBS 📰": "#d97706"}
     stores_to_show = list(results.keys())
@@ -501,6 +540,10 @@ def _show_search() -> None:
                         st.markdown(f"### kr {price:.2f}")
                         if unit_price:
                             st.badge(unit_price, color="blue")
+                        if price is not None and not is_obs:
+                            badge = _market_badge(price, _all_search_prices)
+                            if badge:
+                                st.caption(badge)
 
                         if is_obs and valid_to:
                             from datetime import date as _date
@@ -517,6 +560,33 @@ def _show_search() -> None:
                             _legg_til_popover(name, f"{store}_{i}")
                         if name and not is_obs:
                             _varsle_meg_popover(wl_name, price or 0.0, f"{store}_{i}")
+
+    # --- Kassal: andre butikker ---
+    kassal = st.session_state.get("kassal_results", {})
+    if kassal:
+        st.divider()
+        with st.expander(f"🛒 Andre butikker via Kassal ({sum(len(v) for v in kassal.values())} resultater)"):
+            kassal_cols = st.columns(min(len(kassal), 4))
+            for col, (kstore, kprods) in zip(kassal_cols, kassal.items()):
+                with col:
+                    st.markdown(f"**{kstore}**")
+                    for kp in kprods[:5]:
+                        with st.container(border=True):
+                            if kp.get("image_url"):
+                                st.image(kp["image_url"], width=60)
+                            st.markdown(f"**{kp['name']}**")
+                            if kp.get("variant"):
+                                st.caption(kp["variant"])
+                            st.markdown(f"**kr {kp['price']:.2f}**")
+                            if kp.get("unit_price"):
+                                st.badge(kp["unit_price"], color="blue")
+                            badge = _market_badge(kp["price"], _all_search_prices)
+                            if badge:
+                                st.caption(badge)
+                            if kp.get("url"):
+                                st.markdown(f"[Se produkt]({kp['url']})")
+    elif kassal_configured():
+        pass  # Kassal konfigurert men ingen resultater — ingen melding nødvendig
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +712,34 @@ def _show_liste_resultater() -> None:
     for store, missing in mangler.items():
         if missing:
             st.warning(f"{store}: ingen treff for: {', '.join(missing)}")
+
+    # --- Optimal handleplan ---
+    st.subheader("🗺️ Optimal handleplan")
+    st.caption("Hvilke varer du bør kjøpe hvor for å minimere totalkostnad.")
+    plan: dict[str, list[str]] = {}
+    for row in rows:
+        prices = {s: row[s] for s in STORES if row.get(s) is not None}
+        if not prices:
+            continue
+        cheapest_store = min(prices, key=prices.get)
+        vare_label = row.get("Vare", row.get("_navn", ""))
+        qty = row.get("Antall", 1)
+        qty_str = f" × {qty}" if qty > 1 else ""
+        plan.setdefault(cheapest_store, []).append(f"{vare_label}{qty_str}")
+
+    if plan:
+        plan_cols = st.columns(len(plan))
+        for col, (store, items) in zip(plan_cols, plan.items()):
+            with col:
+                with st.container(border=True):
+                    color = {"Oda": "#005b96", "Meny": "#c0021b"}.get(store, "#444")
+                    st.markdown(
+                        f'<b style="color:{color}">{store}</b>', unsafe_allow_html=True
+                    )
+                    for item in items:
+                        st.markdown(f"- {item}")
+    else:
+        st.info("Ikke nok prisdata til å lage handleplan.")
 
 
 # ---------------------------------------------------------------------------
