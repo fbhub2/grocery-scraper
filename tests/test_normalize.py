@@ -32,6 +32,23 @@ class TestNormalizeSearchTerm:
         assert result == result.strip()
         assert "12 stk" not in result
 
+    def test_lett_melk_og_lettmelk_gir_samme_resultat(self):
+        assert normalize_search_term("Lett melk 0,5%") == normalize_search_term("Lettmelk 0,5%")
+
+    def test_hel_melk_og_helmelk_gir_samme_resultat(self):
+        assert normalize_search_term("Hel melk") == normalize_search_term("Helmelk")
+
+    def test_havre_gryn_og_havregryn_gir_samme_resultat(self):
+        assert normalize_search_term("Havre gryn") == normalize_search_term("Havregryn")
+
+    def test_split_compound_slaaes_sammen(self):
+        assert normalize_search_term("Lett melk") == "lettmelk"
+
+    def test_lett_melk_med_prosent_beholder_prosent(self):
+        result = normalize_search_term("Lett melk 0,5%")
+        assert "0,5%" in result
+        assert "lettmelk" in result
+
 
 class TestParseProductName:
     def test_ekstraher_liter(self):

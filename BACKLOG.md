@@ -76,8 +76,11 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] `app.py` — `_show_prishistorikk()`: selectbox, slider, linjediagram per butikk, statistikk-metrics, rådata-tabell
 - [x] Sidebar-nav + routing koblet inn
 
-### STEG 10 · `feature/normalization-ui`
-- [ ] `main.py` — "Normalisering"-tab: original_name | auto_name | custom_name (editerbar)
+### STEG 10 · `feature/normalization-ui` ✅ mai 2026
+- [x] `db.py` — `list_normals_with_custom(user_id, filter)` — join normal + user_normal
+- [x] `app.py` — `_show_normalisering()`: filter, st.data_editor med Original | Auto | Ditt navn
+- [x] Auto-lagring ved celleendring, slett custom ved tomt felt
+- [x] Sidebar-nav + routing koblet inn
 
 ---
 

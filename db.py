@@ -443,6 +443,20 @@ def get_display_name(original_name: str, user_id: int = None) -> str:
     return original_name
 
 
+def list_normals_with_custom(user_id: int, filter: str = None) -> list[dict]:
+    with _conn() as conn:
+        sql = """
+            SELECT n.id, n.original_name, n.auto_name, un.custom_name
+            FROM normal n
+            LEFT JOIN user_normal un ON un.normal_id = n.id AND un.user_id = ?
+            {}
+            ORDER BY n.original_name
+        """.format("WHERE n.original_name LIKE ?" if filter else "")
+        params = (user_id, f"%{filter}%") if filter else (user_id,)
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
 def list_normals(filter: str = None) -> list[dict]:
     with _conn() as conn:
         if filter:
