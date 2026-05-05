@@ -160,6 +160,10 @@ def _init() -> None:
         item_cols = {row[1] for row in cursor.fetchall()}
         if "search_term" not in item_cols:
             conn.execute("ALTER TABLE list_items ADD COLUMN search_term TEXT")
+        cursor.execute("PRAGMA table_info(price_history)")
+        ph_cols = {row[1] for row in cursor.fetchall()}
+        if "ean" not in ph_cols:
+            conn.execute("ALTER TABLE price_history ADD COLUMN ean TEXT")
 
 
 _init()
@@ -246,12 +250,13 @@ def record_price(
     price: float,
     unit_price: str = None,
     volume: str = None,
+    ean: str = None,
 ) -> None:
     with _conn() as conn:
         conn.execute(
-            """INSERT INTO price_history (product_name, store, price, unit_price, volume)
-               VALUES (?, ?, ?, ?, ?)""",
-            (product_name, store, price, unit_price, volume),
+            """INSERT INTO price_history (product_name, store, price, unit_price, volume, ean)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (product_name, store, price, unit_price, volume, ean),
         )
 
 
@@ -280,6 +285,18 @@ def get_avg_price_by_name(product_name: str, store: str, days: int = 30) -> floa
     if not rows:
         return None
     return sum(r["price"] for r in rows) / len(rows)
+
+
+def get_market_avg(product_name: str, days: int = 30) -> float | None:
+    """Gjennomsnittpris på tvers av alle butikker de siste N dagene."""
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    with _conn() as conn:
+        row = conn.execute(
+            """SELECT AVG(price) as avg FROM price_history
+               WHERE product_name = ? AND recorded_at >= ?""",
+            (product_name, cutoff),
+        ).fetchone()
+    return row["avg"] if row and row["avg"] is not None else None
 
 
 def get_price_trend(product_name: str, store: str, volume: str = None) -> dict | None:
