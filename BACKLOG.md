@@ -90,7 +90,7 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] **`fix/streamlit-cloud-auth`** — `auth.py` leser fra `st.secrets` som fallback, `.strip()` på alle OAuth-verdier
 - [x] **`fix/scraper-dedup`** — `seen_ids`-dedup i Oda og Meny scrapers
 - [x] **`fix/search-ux`** (ISSUE-02) — Fjern antall-felt fra søkeskjema, hardkodet limit=5
-- [ ] **`fix/price-baseline`** (ISSUE-03) — Baseline per product_id+store_id, aldri blande volum
+- [x] **`fix/price-baseline`** (ISSUE-03) — Baseline per product_name+store+volume, aldri blande volum
 - [x] **`fix/price-arrow-semantics`** (ISSUE-06) — 🔴 ↑ = dyrere, 🟢 ↓ = billigere
 
 ---
