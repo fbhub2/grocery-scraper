@@ -8,13 +8,16 @@ import re
 def normalize_search_term(raw: str) -> str:
     """
     Normaliser et søkeord for matching på tvers av butikker.
-    Fjerner volum-tokens, gjør lowercase, trimmer whitespace.
+    Fjerner volum-tokens, gjør lowercase, slår split-sammensatte ord sammen.
     Eksempel: "Tine Lettmelk 1,5 l" -> "tine lettmelk"
+              "Lett melk 0,5%"      -> "lettmelk 0,5%"
     """
     cleaned = re.sub(
         r'\d+[\.,]?\d*\s*(ml|l|g|kg|cl|dl|stk)', '', raw, flags=re.IGNORECASE
     )
     cleaned = re.sub(r'\s+', ' ', cleaned).strip().lower()
+    for split_form, compound in _COMPOUND_JOINS.items():
+        cleaned = re.sub(r'\b' + re.escape(split_form) + r'\b', compound, cleaned)
     return cleaned
 
 
@@ -54,6 +57,9 @@ COMPOUND_SPLITS = {
     "knekkebrød":      "knekke brød",
     "jordbærsyltetøy": "jordbær syltetøy",
 }
+
+# Reverse: join split compounds back to one word — brukes i normalize_search_term
+_COMPOUND_JOINS = {v: k for k, v in COMPOUND_SPLITS.items()}
 
 _UNIT_ALIASES = {
     "liter": "l",
