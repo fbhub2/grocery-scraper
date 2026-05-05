@@ -282,14 +282,22 @@ def get_avg_price_by_name(product_name: str, store: str, days: int = 30) -> floa
     return sum(r["price"] for r in rows) / len(rows)
 
 
-def get_price_trend(product_name: str, store: str) -> dict | None:
+def get_price_trend(product_name: str, store: str, volume: str = None) -> dict | None:
     with _conn() as conn:
-        rows = conn.execute(
-            """SELECT price FROM price_history
-               WHERE product_name = ? AND store = ?
-               ORDER BY id DESC LIMIT 2""",
-            (product_name, store),
-        ).fetchall()
+        if volume:
+            rows = conn.execute(
+                """SELECT price FROM price_history
+                   WHERE product_name = ? AND store = ? AND volume = ?
+                   ORDER BY id DESC LIMIT 2""",
+                (product_name, store, volume),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT price FROM price_history
+                   WHERE product_name = ? AND store = ?
+                   ORDER BY id DESC LIMIT 2""",
+                (product_name, store),
+            ).fetchall()
     if len(rows) < 2:
         return None
     current, previous = rows[0]["price"], rows[1]["price"]

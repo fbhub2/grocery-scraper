@@ -547,11 +547,16 @@ def _search_list_prices(items: list[dict]) -> None:
                         getattr(best, "unit_price", None)
                         or (best.get("unit_price") if isinstance(best, dict) else None)
                     )
+                    variant = (
+                        getattr(best, "variant", None)
+                        or (best.get("variant") if isinstance(best, dict) else None)
+                    )
                     row[store_name] = price
                     row[f"{store_name} (enhet)"] = unit_price or ""
+                    row[f"{store_name} (variant)"] = variant or ""
                     totals[store_name] += price * qty
-                    db.record_price(vare, store_name, price, unit_price=unit_price)
-                    t = db.get_price_trend(vare, store_name)
+                    db.record_price(vare, store_name, price, unit_price=unit_price, volume=variant)
+                    t = db.get_price_trend(vare, store_name, volume=variant)
                     if t and t["delta"] < -0.01:
                         trends.setdefault(vare, {})[store_name] = t
                 else:
@@ -594,7 +599,8 @@ def _show_liste_resultater() -> None:
         product_name = row.get("_navn", row["Vare"])
         display_row = {k: v for k, v in row.items() if k != "_navn"}
         for s in STORES:
-            trend = db.get_price_trend(product_name, s)
+            variant = row.get(f"{s} (variant)") or None
+            trend = db.get_price_trend(product_name, s, volume=variant)
             if trend and abs(trend["delta"]) > 0.01:
                 if trend["delta"] > 0:
                     display_row[f"{s} trend"] = f"🔴 ↑ {trend['delta']:+.2f} kr"
