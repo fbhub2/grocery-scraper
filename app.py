@@ -818,6 +818,62 @@ def _show_prishistorikk() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Seksjon: Normalisering
+# ---------------------------------------------------------------------------
+
+def _show_normalisering() -> None:
+    st.title("🏷️ Normalisering")
+    st.caption(
+        "Endre visningsnavnet på produkter. "
+        "**Ditt navn** overstyrer auto-normalisert navn i hele appen."
+    )
+
+    filter_text = st.text_input(
+        "Filtrer", placeholder="søk på produktnavn...", key="norm_filter"
+    )
+
+    rows = db.list_normals_with_custom(_user_db_id, filter=filter_text or None)
+    if not rows:
+        st.info(
+            "Ingen produktnavn registrert ennå. "
+            "Søk etter produkter for å bygge opp listen."
+        )
+        return
+
+    st.caption(f"{len(rows)} produktnavn")
+
+    df_orig = pd.DataFrame(rows)[["id", "original_name", "auto_name", "custom_name"]]
+    df_orig["custom_name"] = df_orig["custom_name"].fillna("")
+    df_display = df_orig.rename(columns={
+        "original_name": "Original",
+        "auto_name": "Auto-normalisert",
+        "custom_name": "Ditt navn",
+    })
+
+    edited = st.data_editor(
+        df_display,
+        column_config={
+            "id": None,
+            "Original": st.column_config.TextColumn("Original", disabled=True),
+            "Auto-normalisert": st.column_config.TextColumn("Auto-normalisert", disabled=True),
+            "Ditt navn": st.column_config.TextColumn(
+                "Ditt navn", help="Tomt = bruk auto-normalisert navn"
+            ),
+        },
+        use_container_width=True,
+        hide_index=True,
+        key="norm_editor",
+    )
+
+    changed = edited[edited["Ditt navn"] != df_display["Ditt navn"]]
+    if not changed.empty:
+        for _, row in changed.iterrows():
+            db.set_custom_name_by_id(int(row["id"]), row["Ditt navn"] or "", _user_db_id)
+        st.success(f"✓ {len(changed)} navn lagret")
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
 
@@ -848,6 +904,7 @@ with st.sidebar:
         ("🛒 Handlelister", "handlelister"),
         (f"⭐ Varslingsliste{f' ({_wl_triggered})' if _wl_triggered else ''}", "varslingsliste"),
         ("📈 Prishistorikk", "prishistorikk"),
+        ("🏷️ Normalisering", "normalisering"),
     ]
     for _label, _key in _nav_items:
         _active = st.session_state.section == _key
@@ -877,3 +934,5 @@ elif st.session_state.section == "varslingsliste":
     _show_varslingsliste()
 elif st.session_state.section == "prishistorikk":
     _show_prishistorikk()
+elif st.session_state.section == "normalisering":
+    _show_normalisering()
