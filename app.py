@@ -1001,6 +1001,64 @@ def _show_handlelister() -> None:
     if active_id is None:
         st.title("🛒 Mine handlelister")
 
+        # --- Familie-seksjon ---
+        user_families = db.get_user_families(_user_db_id)
+        if user_families:
+            for fam in user_families:
+                fam_id = fam["id"]
+                is_fam_owner = fam["my_role"] == "owner"
+                with st.expander(
+                    f"👨‍👩‍👧 Familie: **{fam['name']}** · kode: `{fam['invite_code']}`"
+                ):
+                    members = db.get_family_members(fam_id)
+                    st.caption(
+                        "Alle familiemedlemmer ser hverandres handlelister automatisk."
+                    )
+                    st.markdown(f"**Medlemmer ({len(members)}):**")
+                    for m in members:
+                        crown = " 👑" if m["role"] == "owner" else ""
+                        st.caption(f"{m['name'] or m['email']}{crown}")
+                    st.divider()
+                    if is_fam_owner:
+                        if st.button(
+                            "🗑️ Slett familie",
+                            key=f"del_family_{fam_id}",
+                            type="secondary",
+                            help="Alle mister tilgang til hverandres lister",
+                        ):
+                            db.delete_family(fam_id)
+                            st.rerun()
+                    else:
+                        if st.button("Forlat familie", key=f"leave_family_{fam_id}", type="secondary"):
+                            db.leave_family(fam_id, _user_db_id)
+                            st.rerun()
+        else:
+            fc1, fc2 = st.columns(2)
+            with fc1:
+                with st.expander("👨‍👩‍👧 Opprett familie"):
+                    fam_name = st.text_input(
+                        "Familienavn", placeholder="f.eks. Familie Berntsen", key="new_family_name"
+                    )
+                    if st.button("Opprett", key="create_family_btn") and fam_name.strip():
+                        fam = db.create_family(fam_name.strip(), _user_db_id)
+                        st.success(f"Familie opprettet! Del koden: **{fam['invite_code']}**")
+                        st.rerun()
+            with fc2:
+                with st.expander("🔑 Bli med i familie"):
+                    fam_code = st.text_input(
+                        "Delingskode", placeholder="f.eks. A3F7B2", key="join_family_code"
+                    )
+                    if st.button("Bli med", key="join_family_btn") and fam_code.strip():
+                        found_fam = db.get_family_by_invite_code(fam_code.strip())
+                        if not found_fam:
+                            st.warning("Ugyldig kode — sjekk at du har skrevet riktig.")
+                        else:
+                            db.join_family(found_fam["id"], _user_db_id)
+                            st.success(f"Du er nå med i familie **{found_fam['name']}**!")
+                            st.rerun()
+
+        st.divider()
+
         with st.expander("➕ Ny liste"):
             nl = st.text_input(
                 "Navn på listen", placeholder="f.eks. Ukeshandel", key="new_list_name"
@@ -1018,9 +1076,17 @@ def _show_handlelister() -> None:
             return
 
         for lst in lists:
-            is_owner = lst.get("my_role", "owner") == "owner"
-            icon = "👥 " if not is_owner else ""
-            owner_note = f" _(delt av {lst.get('owner_name', '?')})_" if not is_owner else ""
+            role = lst.get("my_role", "owner")
+            is_owner = role == "owner"
+            if role == "owner":
+                icon, owner_note = "", ""
+            elif role == "member":
+                icon = "👥 "
+                owner_note = f" _(delt av {lst.get('owner_name', '?')})_"
+            else:  # family
+                icon = "👨‍👩‍👧 "
+                fam_label = lst.get("family_name") or ""
+                owner_note = f" _({lst.get('owner_name', '?')}" + (f" · {fam_label}" if fam_label else "") + ")_"
             c1, c2, c3 = st.columns([7, 1, 1])
             c1.markdown(f"**{icon}{lst['name']}**{owner_note} — {lst['item_count']} varer")
             if c2.button("Åpne", key=f"open_{lst['id']}", use_container_width=True):
@@ -1031,10 +1097,11 @@ def _show_handlelister() -> None:
                 if c3.button("🗑️", key=f"del_{lst['id']}", use_container_width=True, help="Slett liste"):
                     db.delete_shopping_list(lst["id"])
                     st.rerun()
-            else:
+            elif role == "member":
                 if c3.button("✕", key=f"leave_{lst['id']}", use_container_width=True, help="Forlat liste"):
                     db.remove_list_member(lst["id"], _user_db_id)
                     st.rerun()
+            # family-lister: ingen knapp — forlat familien for å fjerne tilgang
 
     else:
         lists = _user_lists()
