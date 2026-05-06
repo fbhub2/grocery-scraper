@@ -4,29 +4,26 @@
 
 ---
 
-## ✅ STEG 13 implementert — `feature/family-mode` (mai 2026)
+## ✅ Vedlikehold utført — mai 2026
 
-Branch klar for test og merge til dev.
-
-**Test manuelt:**
-1. `streamlit run app.py`
-2. Gå til Handlelister → åpne en liste du eier
-3. Klikk "👥 Del liste" → kopier URL → åpne i nytt vindu med annen bruker
-4. Verifiser at listen vises med 👥-ikon hos member, og at eier ser members-lista
-5. Test "Forlat liste" som member og "Fjern member" som eier
-
-**Merk:** Del-URL bruker `st.query_params.get("_base_url")` som fallback — i prod
-vil base-URL-en ikke settes automatisk. Vurder å hardkode prod-URL som env-variabel
-eller la brukeren kopiere fra nettleseren selv.
+- `tasks.py` — `run_auto_normalize(force=True)` overskriv alle auto_name
+- `tasks.py` — CLI-flagg `python tasks.py normalize --force`
+- `app.py` — admin-knapp "🔄 Kjør auto-normalisering (force)"
+- `app.py` — `SHARE_BASE_URL` env-variabel for del-liste-URL
+- 95 eksisterende produktnavn kjørt gjennom ny normalize-logikk
 
 ---
 
-## Nå: STEG 14 eller release til main
+## Neste: STEG 14 — `feature/obs-import-v2`
 
-**Kandidater:**
-- **Release til main** — alle STEG 1–13 er ferdig og testet på dev
-- **STEG 14** — OBS-import v2 (automatisk refresh, utløpsdato) + MCP-fix
-- **Bugfix** — del-liste base-URL-håndtering for Streamlit Cloud
+**Mål:**
+- OBS-tilbudsavis: automatisk refresh via `tasks.py`
+- Utløpsdato-håndtering (skjul utgåtte OBS-tilbud)
+- **Langsiktig:** Ollama-lokal → MCP → prod-db pipeline
+
+**Forutsetning:**
+- Branchen `feature/obs-import` finnes allerede (se git log)
+- Sjekk hva som er gjort der før du starter nytt arbeid
 
 ---
 
@@ -37,5 +34,7 @@ eller la brukeren kopiere fra nettleseren selv.
 | 1–11 | (diverse)                      | ✅ Ferdig    |
 | 12   | `feature/single-product-view`  | ✅ Ferdig    |
 | —    | `feature/normalization-ux`     | ✅ Ferdig    |
-| 13   | `feature/family-mode`          | ⏳ Test      |
-| 14   | OBS-import v2 / MCP-fix        | 📋 Plan      |
+| 13   | `feature/family-mode`          | ✅ Ferdig    |
+| —    | vedlikehold mai 2026           | ✅ Ferdig    |
+| 14   | `feature/obs-import-v2`        | 📋 Neste     |
+| 15   | Streamlit Cloud deploy         | 📋 Plan      |

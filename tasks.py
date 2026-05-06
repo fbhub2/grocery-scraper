@@ -8,16 +8,19 @@ import db
 from normalize import auto_normalize, check_threshold
 
 
-def run_auto_normalize() -> int:
+def run_auto_normalize(force: bool = False) -> int:
     """
-    Oppdaterer normal.auto_name for alle rader der verdien er NULL.
-    Eksisterende auto_name-verdier overskrives aldri.
+    Oppdaterer normal.auto_name.
+    force=False: kun rader der auto_name er NULL (standard).
+    force=True:  oppdaterer alle rader — brukes etter endringer i normalize.py.
     Returnerer antall rader oppdatert.
     """
-    pending = [r for r in db.list_normals() if r["auto_name"] is None]
+    all_rows = db.list_normals()
+    pending = all_rows if force else [r for r in all_rows if r["auto_name"] is None]
     for row in pending:
         db.upsert_normal(row["original_name"], auto_name=auto_normalize(row["original_name"]))
-    print(f"auto_normalize: oppdaterte {len(pending)} rader")
+    mode = "force" if force else "NULL-only"
+    print(f"auto_normalize ({mode}): oppdaterte {len(pending)} av {len(all_rows)} rader")
     return len(pending)
 
 
@@ -78,8 +81,8 @@ def run_price_fetch() -> dict:
 
 if __name__ == "__main__":
     if "normalize" in sys.argv:
-        run_auto_normalize()
+        run_auto_normalize(force="--force" in sys.argv)
     elif "fetch" in sys.argv:
         run_price_fetch()
     else:
-        print("Bruk: python tasks.py normalize | fetch")
+        print("Bruk: python tasks.py normalize [--force] | fetch")

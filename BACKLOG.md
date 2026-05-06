@@ -53,16 +53,25 @@ Prioritert liste. Øverst = viktigst.
 - [x] `app.py` — "👥 Del liste"-ekspander: del-URL (kopiervennlig), inviter via e-post, vis/fjern members
 - [x] Kun eier kan slette liste, administrere members og generere del-lenke
 
+### Vedlikehold · mai 2026
+- [x] `tasks.py` — `run_auto_normalize(force=True)` overskriv alle auto_name
+- [x] `tasks.py` — CLI-flagg `python tasks.py normalize --force`
+- [x] Admin-panel — "🔄 Kjør auto-normalisering (force)"-knapp
+- [x] 95 eksisterende produktnavn kjørt gjennom ny logikk (compound splits + merkevare-stripping)
+- [x] `SHARE_BASE_URL` env-variabel for del-liste-URL (dev: localhost, prod: Streamlit Cloud URL)
+
 ---
 
 ## 📋 Planlagt
 
 ### STEG 14 · `feature/obs-import-v2`
 - OBS-tilbudsavis: automatisk refresh (tasks.py), utløpsdato-håndtering
-- MCP grocery-scraper laster ikke i Claude Desktop (Electron-problem)
+- **Langsiktig:** lage egen Ollama-lokal → MCP → prod-db
+  (lokal LLM-agent parser tilbudsaviser og pusher til prod-databasen via MCP-server)
 
 ### STEG 15 · `feature/streamlit-cloud-deploy`
-- Push main til Streamlit Cloud, verifiser auth og secrets
+- Push main til Streamlit Cloud
+- Sett secrets: GOOGLE_CLIENT_ID/SECRET, KASSAL_API_KEY, ADMIN_EMAIL, SHARE_BASE_URL
 
 ---
 

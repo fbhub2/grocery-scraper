@@ -233,16 +233,24 @@ def _admin_panel() -> None:
 
     st.divider()
     st.subheader("Vedlikehold")
-    mc1, mc2 = st.columns(2)
+    mc1, mc2, mc3 = st.columns(3)
     with mc1:
         if st.button("Slett utlopte sesjoner (>30 dager)", type="secondary"):
             conn.execute("DELETE FROM session WHERE created_at < date('now', '-30 days')")
             conn.commit()
             st.success("Slettet")
     with mc2:
-        st.metric("Normal uten auto_name", conn.execute(
+        null_count = conn.execute(
             "SELECT COUNT(*) FROM normal WHERE auto_name IS NULL"
-        ).fetchone()[0])
+        ).fetchone()[0]
+        total_count = conn.execute("SELECT COUNT(*) FROM normal").fetchone()[0]
+        st.metric("Normal uten auto_name", f"{null_count} / {total_count}")
+    with mc3:
+        if st.button("🔄 Kjør auto-normalisering (force)", type="secondary",
+                     help="Overskriv alle auto_name med ny normalize-logikk"):
+            from tasks import run_auto_normalize
+            n = run_auto_normalize(force=True)
+            st.success(f"✓ {n} produktnavn oppdatert")
     conn.close()
 
 
@@ -1050,8 +1058,11 @@ def _show_handlelister() -> None:
         if is_owner:
             with st.expander("👥 Del liste"):
                 share_token = db.get_or_create_share_token(active_id)
-                base_url = st.query_params.get("_base_url", "http://localhost:8501")
-                join_url = f"{base_url}?join={share_token}"
+                _base = (
+                    os.environ.get("SHARE_BASE_URL", "").rstrip("/")
+                    or "http://localhost:8501"
+                )
+                join_url = f"{_base}?join={share_token}"
                 st.caption("Send denne lenken til den du vil dele listen med:")
                 st.code(join_url, language=None)
                 st.caption("Alle med lenken som har logget inn kan bli med.")
