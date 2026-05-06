@@ -4,16 +4,13 @@
 
 ---
 
-## ✅ STEG 12 implementert — `feature/single-product-view` (mai 2026)
+## ✅ `feature/normalization-ux` merget til dev (mai 2026)
 
-Branch klar for test og merge til dev.
-
-**Test manuelt:**
-1. `streamlit run app.py`
-2. Søk etter et produkt (f.eks. "melk")
-3. Klikk én rad i søketabellen → sjekk at "🔍 Vis detaljer →" dukker opp
-4. Klikk knappen → produktdetalj-visning med alle butikker + historikk
-5. Klikk "← Tilbake til søk" → søkeresultater er bevart
+Levert:
+- "lettmelk" og "lett melk" gir nå samme søkeresultat
+- Kassal-butikker i kombinert søketabell (ikke lenger separat ekspander)
+- Normaliserings-UI redesignet: →/⟳-knapper, manuell lagring, ingen tabellhopping
+- Auto-normalisering: 30+ compound splits + merkevare-stripping
 
 ---
 
@@ -22,10 +19,10 @@ Branch klar for test og merge til dev.
 Delt handleliste på tvers av brukere (familie/husstand).
 
 **Kjernefeatures:**
-- Inviter andre brukere til en delt liste via e-post
 - `list_member`-tabell: `(list_id, user_id, role)` — owner / member
+- Inviter via e-post fra åpen liste
 - `get_shopping_lists()` returnerer egne + delte lister
-- UI: invite-knapp på åpen liste, visuell markering av delte lister
+- Visuell markering av delte lister (👥-ikon)
 
 ---
 
@@ -33,18 +30,9 @@ Delt handleliste på tvers av brukere (familie/husstand).
 
 | Steg | Branch                         | Status      |
 |------|--------------------------------|-------------|
-| 1    | `feature/db-foundation`        | ✅ Ferdig    |
-| 2    | `feature/normalization`        | ✅ Ferdig    |
-| 3    | `feature/product-persistence`  | ✅ Ferdig    |
-| 4    | `feature/price-fetch-task`     | ✅ Ferdig    |
-| 5    | `feature/google-auth`          | ✅ Ferdig    |
-| 6    | `feature/per-user-isolation`   | ✅ Ferdig    |
-| 7    | `feature/shopping-list`        | ✅ Ferdig    |
-| 8    | `feature/watchlist`            | ✅ Ferdig    |
-| 9    | `feature/price-history-ui`     | ✅ Ferdig    |
-| 10   | `feature/normalization-ui`     | ✅ Ferdig    |
-| 11   | `feature/kassal-integration`   | ✅ Ferdig    |
+| 1–11 | (diverse)                      | ✅ Ferdig    |
 | —    | `bugfix/search-improvements`   | ✅ Ferdig    |
 | —    | `feature/butikk-innstillinger` | ✅ Ferdig    |
-| 12   | `feature/single-product-view`  | ⏳ Test      |
+| 12   | `feature/single-product-view`  | ✅ Ferdig    |
+| —    | `feature/normalization-ux`     | ✅ Ferdig    |
 | 13   | `feature/family-mode`          | 📋 Plan      |
