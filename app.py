@@ -1258,6 +1258,10 @@ def _show_normalisering() -> None:
 
     st.divider()
 
+    # on_click-callback: settes FØR widget rendres → ingen konflikt
+    def _set_norm(key: str, value: str) -> None:
+        st.session_state[key] = value
+
     # Kolonneoverskrifter
     h1, h2, h3, h4, h5 = st.columns([3, 3, 3, 1, 1])
     h1.caption("**Original**")
@@ -1271,7 +1275,7 @@ def _show_normalisering() -> None:
         current_custom = row.get("custom_name") or ""
         key = f"norm_edit_{rid}"
 
-        # Pre-fill session state fra DB første gang
+        # Pre-fill fra DB første gang (før widget rendres, ingen konflikt)
         if key not in st.session_state:
             st.session_state[key] = current_custom
 
@@ -1284,13 +1288,18 @@ def _show_normalisering() -> None:
                 placeholder="Ditt navn (tomt = bruk auto)"
             )
         with c4:
-            if st.button("→", key=f"copy_orig_{rid}", help="Kopier original til 'Ditt navn'"):
-                st.session_state[key] = orig
-                st.rerun()
+            st.button(
+                "→", key=f"copy_orig_{rid}",
+                on_click=_set_norm, args=(key, orig),
+                help="Kopier original til 'Ditt navn'",
+            )
         with c5:
-            if auto and st.button("⟳", key=f"use_auto_{rid}", help="Bruk auto-normalisert"):
-                st.session_state[key] = auto
-                st.rerun()
+            if auto:
+                st.button(
+                    "⟳", key=f"use_auto_{rid}",
+                    on_click=_set_norm, args=(key, auto),
+                    help="Bruk auto-normalisert",
+                )
 
 
 # ---------------------------------------------------------------------------
