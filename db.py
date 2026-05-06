@@ -161,6 +161,20 @@ def _init() -> None:
                 user_json  TEXT NOT NULL,
                 created_at TEXT DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS family (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL,
+                invite_code TEXT NOT NULL UNIQUE,
+                owner_id    INTEGER NOT NULL REFERENCES user(id),
+                created_at  TEXT DEFAULT (date('now'))
+            );
+            CREATE TABLE IF NOT EXISTS family_member (
+                family_id INTEGER NOT NULL REFERENCES family(id) ON DELETE CASCADE,
+                user_id   INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+                role      TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
+                joined_at TEXT DEFAULT (date('now')),
+                PRIMARY KEY (family_id, user_id)
+            );
         """)
 
         # v1.x migrasjoner
@@ -686,22 +700,41 @@ def create_shopping_list(user_id: int, name: str) -> int:
 
 
 def get_shopping_lists(user_id: int) -> list[dict]:
-    """Returnerer egne lister + lister der brukeren er invitert som member."""
+    """Returnerer egne lister + individuelt delte lister + lister fra familie-medlemmer."""
     with _conn() as conn:
+        family_rows = conn.execute(
+            """SELECT DISTINCT fm2.user_id, f.name as family_name
+               FROM family_member fm1
+               JOIN family_member fm2 ON fm1.family_id = fm2.family_id
+               JOIN family f ON fm1.family_id = f.id
+               WHERE fm1.user_id = ? AND fm2.user_id != ?""",
+            (user_id, user_id),
+        ).fetchall()
+        family_user_map = {r["user_id"]: r["family_name"] for r in family_rows}
+        family_user_ids = list(family_user_map.keys())
+
+        in_clause = f"({','.join('?' * len(family_user_ids))})" if family_user_ids else "(NULL)"
         rows = conn.execute(
-            """SELECT sl.*, COUNT(sli.id) as item_count,
-                      CASE WHEN sl.user_id = ? THEN 'owner' ELSE 'member' END as my_role,
-                      owner.name as owner_name
+            f"""SELECT sl.*, COUNT(sli.id) as item_count,
+                       CASE WHEN sl.user_id = ? THEN 'owner'
+                            WHEN sl.id IN (SELECT list_id FROM list_member WHERE user_id = ?) THEN 'member'
+                            ELSE 'family' END as my_role,
+                       owner.name as owner_name
                FROM shopping_list sl
                LEFT JOIN shopping_list_item sli ON sl.id = sli.list_id
                LEFT JOIN user owner ON sl.user_id = owner.id
                WHERE sl.archived = 0
                  AND (sl.user_id = ?
-                      OR sl.id IN (SELECT list_id FROM list_member WHERE user_id = ?))
+                      OR sl.id IN (SELECT list_id FROM list_member WHERE user_id = ?)
+                      OR sl.user_id IN {in_clause})
                GROUP BY sl.id ORDER BY sl.created_at DESC""",
-            (user_id, user_id, user_id),
+            (user_id, user_id, user_id, user_id, *family_user_ids),
         ).fetchall()
-    return [dict(r) for r in rows]
+
+    result = [dict(r) for r in rows]
+    for r in result:
+        r["family_name"] = family_user_map.get(r["user_id"]) if r["my_role"] == "family" else None
+    return result
 
 
 def is_list_owner(list_id: int, user_id: int) -> bool:
@@ -922,3 +955,74 @@ def get_session_user(token: str) -> dict | None:
 def delete_session(token: str) -> None:
     with _conn() as conn:
         conn.execute("DELETE FROM session WHERE token = ?", (token,))
+
+
+# ---------------------------------------------------------------------------
+# v2.0 — familie (delt tilgang til alle lister på tvers av brukere)
+# ---------------------------------------------------------------------------
+
+def create_family(name: str, owner_id: int) -> dict:
+    import secrets as _secrets
+    code = _secrets.token_hex(3).upper()  # 6 hex-tegn, f.eks. "A3F7B2"
+    with _conn() as conn:
+        cursor = conn.execute(
+            "INSERT INTO family (name, invite_code, owner_id) VALUES (?, ?, ?)",
+            (name, code, owner_id),
+        )
+        family_id = cursor.lastrowid
+        conn.execute(
+            "INSERT INTO family_member (family_id, user_id, role) VALUES (?, ?, 'owner')",
+            (family_id, owner_id),
+        )
+    return {"id": family_id, "name": name, "invite_code": code}
+
+
+def get_family_by_invite_code(code: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM family WHERE invite_code = ?", (code.upper().strip(),)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def join_family(family_id: int, user_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO family_member (family_id, user_id, role) VALUES (?, ?, 'member')",
+            (family_id, user_id),
+        )
+
+
+def get_user_families(user_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT f.*, fm.role as my_role FROM family f
+               JOIN family_member fm ON f.id = fm.family_id
+               WHERE fm.user_id = ? ORDER BY f.created_at""",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_family_members(family_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT fm.role, fm.joined_at, u.id as user_id, u.email, u.name
+               FROM family_member fm JOIN user u ON fm.user_id = u.id
+               WHERE fm.family_id = ? ORDER BY fm.role DESC, fm.joined_at""",
+            (family_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def leave_family(family_id: int, user_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM family_member WHERE family_id = ? AND user_id = ?",
+            (family_id, user_id),
+        )
+
+
+def delete_family(family_id: int) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM family WHERE id = ?", (family_id,))
