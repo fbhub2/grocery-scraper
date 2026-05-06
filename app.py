@@ -388,6 +388,8 @@ def _legg_til_popover(name: str, key_suffix: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _show_product_detail() -> None:
+    import re as _re
+
     pd_info = st.session_state.product_detail
     name: str = pd_info["name"]
     variant: str = pd_info.get("variant") or ""
@@ -409,50 +411,83 @@ def _show_product_detail() -> None:
         results, _ = run_search(query, 10)
         kassal = run_kassal_search(query, limit=20) if _show_fysiske else {}
 
+    # Tokens fra produktnavnet som brukes for relevansfiltrering.
+    # Krav: minst ett token (≥4 tegn) fra det opprinnelige produktnavnet
+    # må finnes i resultattnavnet for å unngå off-topic treff.
+    _name_tokens = [t.lower() for t in _re.split(r'\W+', name) if len(t) >= 4]
+
+    def _is_relevant(result_name: str) -> bool:
+        if not _name_tokens:
+            return True
+        rl = result_name.lower()
+        return any(tok in rl for tok in _name_tokens)
+
+    def _vol_matches(result_variant: str) -> bool:
+        if not variant:
+            return True
+        rv = (result_variant or "").lower().replace(" ", "")
+        sv = variant.lower().replace(" ", "")
+        return sv in rv or rv in sv
+
     all_prices: list[dict] = []
+    seen: set[tuple] = set()  # (butikk_key, pris) for dedup innad i kilde
+
     for store, prods in results.items():
         if store == "OBS 📰":
             continue
         for p in prods:
             pd_dict = p.to_dict() if hasattr(p, "to_dict") else p
             price = pd_dict.get("price")
-            if price is None:
+            result_name = pd_dict.get("name") or ""
+            if price is None or not _is_relevant(result_name):
                 continue
+            key = (store.lower(), round(float(price), 2))
+            if key in seen:
+                continue
+            seen.add(key)
             all_prices.append({
                 "Butikk": store,
-                "Produkt": pd_dict.get("name") or name,
+                "Produkt": result_name or name,
                 "Mengde": pd_dict.get("variant") or "",
                 "Pris (kr)": float(price),
                 "Per enhet": pd_dict.get("unit_price") or "",
-                "URL": pd_dict.get("url") or "",
                 "_online": True,
             })
+
     for store, prods in kassal.items():
+        # Ikke vis Kassal-data for butikker vi allerede har direkte scraper-data fra
+        if store in ONLINE_STORES:
+            continue
         for p in prods:
             price = p.get("price")
-            if price is None:
+            result_name = p.get("name") or ""
+            if price is None or not _is_relevant(result_name):
                 continue
+            key = (store.lower(), round(float(price), 2))
+            if key in seen:
+                continue
+            seen.add(key)
             all_prices.append({
                 "Butikk": f"🏪 {store}",
-                "Produkt": p.get("name") or name,
+                "Produkt": result_name or name,
                 "Mengde": p.get("variant") or "",
                 "Pris (kr)": float(price),
                 "Per enhet": p.get("unit_price") or "",
-                "URL": p.get("url") or "",
                 "_online": False,
             })
 
-    if not all_prices:
-        st.info("Ingen priser funnet for dette produktet.")
-    else:
-        all_prices.sort(key=lambda x: x["Pris (kr)"])
-        cheapest = all_prices[0]
-        st.success(
-            f"💰 Billigst: **{cheapest['Butikk']}** — kr {cheapest['Pris (kr)']:.2f}"
-            + (f"  ·  {cheapest['Per enhet']}" if cheapest["Per enhet"] else "")
-        )
+    # Del i "samme volum" og "andre størrelser"
+    same_vol = sorted(
+        [p for p in all_prices if _vol_matches(p["Mengde"])],
+        key=lambda x: x["Pris (kr)"],
+    )
+    other_vol = sorted(
+        [p for p in all_prices if not _vol_matches(p["Mengde"])],
+        key=lambda x: x["Pris (kr)"],
+    )
 
-        df_p = pd.DataFrame([{k: v for k, v in r.items() if not k.startswith("_")} for r in all_prices])
+    def _show_price_table(rows: list[dict]) -> None:
+        df_p = pd.DataFrame([{k: v for k, v in r.items() if not k.startswith("_")} for r in rows])
         st.dataframe(
             df_p,
             column_config={"Pris (kr)": st.column_config.NumberColumn(format="%.2f kr")},
@@ -460,14 +495,35 @@ def _show_product_detail() -> None:
             hide_index=True,
         )
 
+    if not same_vol and not other_vol:
+        st.info("Ingen priser funnet for dette produktet.")
+    else:
+        focus = same_vol if same_vol else other_vol
+        cheapest = focus[0]
+        st.success(
+            f"💰 Billigst: **{cheapest['Butikk']}** — kr {cheapest['Pris (kr)']:.2f}"
+            + (f"  ·  {cheapest['Per enhet']}" if cheapest["Per enhet"] else "")
+        )
+
+        if same_vol:
+            vol_label = f" ({variant})" if variant else ""
+            st.subheader(f"Priser{vol_label}")
+            _show_price_table(same_vol)
+        else:
+            _show_price_table(other_vol)
+
+        if other_vol and same_vol:
+            with st.expander(f"Andre størrelser ({len(other_vol)} resultater)"):
+                _show_price_table(other_vol)
+
     # Handlinger
     st.divider()
     wl_name = display_name if variant else name
     act1, act2 = st.columns(2)
+    ref_price = same_vol[0]["Pris (kr)"] if same_vol else (other_vol[0]["Pris (kr)"] if other_vol else pd_info.get("price", 0.0))
     with act1:
         _legg_til_popover(name, f"det_{name[:12]}")
     with act2:
-        ref_price = all_prices[0]["Pris (kr)"] if all_prices else pd_info.get("price", 0.0)
         _varsle_meg_popover(wl_name, ref_price, f"det_{name[:12]}")
 
     # Prishistorikk
