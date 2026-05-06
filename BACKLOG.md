@@ -76,6 +76,11 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] `app.py` — `_show_prishistorikk()`: selectbox, slider, linjediagram per butikk, statistikk-metrics, rådata-tabell
 - [x] Sidebar-nav + routing koblet inn
 
+### Bugfikser · `bugfix/search-improvements` ✅ mai 2026
+- [x] Kassal-priser lagres til `price_history` med EAN
+- [x] Handleliste prissammenligning viser matchet produktnavn per butikk
+- [x] Søketabell: ⭐-kolonne for varslingsliste-status + "Varsle valgte"-knapp
+
 ### STEG 11 · `feature/kassal-integration` ✅ mai 2026
 - [x] `scrapers/kassal.py` — Kassal.app API-scraper (graceful fallback uten nøkkel)
 - [x] `scrapers/base.py` — `ean` og `store_name` felt på Product
@@ -130,8 +135,11 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 ## 🐛 Kjente bugs
 
 - [ ] **MCP grocery-scraper laster ikke i Claude Desktop** — server virker isolert, problem i Electron-prosess-spawning
-- [ ] **ISSUE-01** — Manglende normalisering: samme produkt vises som 3–5 rader (fix: STEG 2)
-- [ ] **ISSUE-02** — Antall på søk-nivå er semantisk feil (fix: `fix/search-ux`)
-- [ ] **ISSUE-03** — Prisendring-baseline er feil volum (fix: `fix/price-baseline`)
-- [ ] **ISSUE-06** — Prisendring-pil er visuelt inkonsistent (fix: `fix/price-arrow-semantics`)
+- [x] **ISSUE-01** — Manglende normalisering: samme produkt vises som 3–5 rader (fix: STEG 2)
+- [x] **ISSUE-02** — Antall på søk-nivå er semantisk feil (hardkodet limit=5)
+- [x] **ISSUE-03** — Prisendring-baseline er feil volum (volume-parameter i `get_price_trend`)
+- [x] **ISSUE-06** — Prisendring-pil er visuelt inkonsistent (🔴↑ dyrere, 🟢↓ billigere)
 - [ ] **ISSUE-07** — Seleksjonsmodell på feil abstraksjonsnivå: SKU vs. kategori (fix: STEG 7)
+- [x] **BUG-EAN** — Kassal-priser ble ikke lagret til price_history med EAN (`bugfix/search-improvements`)
+- [x] **BUG-HANDLELISTE-PRODUKT** — Prissammenligning i handleliste viste ikke matchet produktnavn (`bugfix/search-improvements`)
+- [x] **BUG-WL-STJERNE** — Søketabell viste ikke ⭐ for produkter på varslingsliste (`bugfix/search-improvements`)
