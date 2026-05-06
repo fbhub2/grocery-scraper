@@ -88,20 +88,21 @@ class TestAutoNormalize:
         assert auto_normalize("knekkebrød") == "knekke brød"
 
     def test_volum_stor_L(self):
-        assert auto_normalize("Tine 1L") == "tine 1l"
+        # "Tine" er merkevare og strippes
+        assert auto_normalize("Tine 1L") == "1l"
 
     def test_volum_liter_tekst(self):
-        assert auto_normalize("Tine 1 liter") == "tine 1l"
+        assert auto_normalize("Tine 1 liter") == "1l"
 
     def test_volum_1000g_til_kg(self):
-        assert auto_normalize("Tine 1000g") == "tine 1kg"
+        assert auto_normalize("Tine 1000g") == "1kg"
 
     def test_volum_500g_beholdes(self):
         assert auto_normalize("Havre 500g") == "havre 500g"
 
     def test_camelcase_split(self):
+        # "Tine" er merkevare og strippes — men "lett melk" skal være der
         result = auto_normalize("TineLettmelk")
-        assert "tine" in result
         assert "lett" in result
         assert "melk" in result
 
@@ -112,11 +113,22 @@ class TestAutoNormalize:
         assert auto_normalize("smør") == "smør"
 
     def test_compound_i_lengre_navn(self):
+        # "Tine" strippes som merkevare
         result = auto_normalize("Tine lettmelk 1L")
-        assert result == "tine lett melk 1l"
+        assert result == "lett melk 1l"
 
     def test_volum_med_mellomrom(self):
+        # "q-meieriene" og "q" (kortform) — "q" er ikke i _BRAND_WORDS, kun "q-meieriene"
         assert auto_normalize("Q melk 1,5 l") == "q melk 1,5l"
+
+    def test_merkevare_strippes(self):
+        assert "tine" not in auto_normalize("Tine Lettmelk 0,5% 1l")
+        assert "lett melk" in auto_normalize("Tine Lettmelk 0,5% 1l")
+
+    def test_ikke_merkevare_beholdes(self):
+        # "Fjordland" er ikke i _BRAND_WORDS
+        result = auto_normalize("Fjordland Middagssuppe")
+        assert "fjordland" in result
 
 
 class TestCheckThreshold:
