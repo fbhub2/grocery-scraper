@@ -4,29 +4,28 @@
 
 ---
 
-## ✅ `bugfix/search-improvements` merget til dev (mai 2026)
+## ✅ STEG 12 implementert — `feature/single-product-view` (mai 2026)
 
-Tre bugfikser levert:
-1. Kassal-priser lagres nå til `price_history` (EAN inkludert)
-2. Handleliste prissammenligning viser matchet produktnavn per butikk
-3. Søketabell viser ⭐ for produkter på varslingsliste + "Varsle valgte"-knapp
+Branch klar for test og merge til dev.
+
+**Test manuelt:**
+1. `streamlit run app.py`
+2. Søk etter et produkt (f.eks. "melk")
+3. Klikk én rad i søketabellen → sjekk at "🔍 Vis detaljer →" dukker opp
+4. Klikk knappen → produktdetalj-visning med alle butikker + historikk
+5. Klikk "← Tilbake til søk" → søkeresultater er bevart
 
 ---
 
-## Nå: `bugfix/obs-validity` eller STEG 12
+## Nå: STEG 13 — `feature/family-mode`
 
-**Kandidater (velg én):**
+Delt handleliste på tvers av brukere (familie/husstand).
 
-### A) STEG 12 — `feature/single-product-view`
-Kassal.app-inspirert redesign: enkelt produkt → alle butikker på én side.
-- Klikk produkt i søkeresultat → åpner detaljvisning
-- Alle butikker som selger produktet (via EAN-match)
-- Prishistorikk inline
-- Kompleks — estimert 2–3 sesjoner
-
-### B) `bugfix/obs-kassal-toggle`
-Kassal toggle ("Vis fysiske butikker") fra `feature/butikk-innstillinger`
-er committet men ikke merget til dev ennå.
+**Kjernefeatures:**
+- Inviter andre brukere til en delt liste via e-post
+- `list_member`-tabell: `(list_id, user_id, role)` — owner / member
+- `get_shopping_lists()` returnerer egne + delte lister
+- UI: invite-knapp på åpen liste, visuell markering av delte lister
 
 ---
 
@@ -46,6 +45,6 @@ er committet men ikke merget til dev ennå.
 | 10   | `feature/normalization-ui`     | ✅ Ferdig    |
 | 11   | `feature/kassal-integration`   | ✅ Ferdig    |
 | —    | `bugfix/search-improvements`   | ✅ Ferdig    |
-| —    | `feature/butikk-innstillinger` | ⏳ Klar, ikke merget til dev |
-| 12   | `feature/single-product-view`  | 📋 Plan      |
+| —    | `feature/butikk-innstillinger` | ✅ Ferdig    |
+| 12   | `feature/single-product-view`  | ⏳ Test      |
 | 13   | `feature/family-mode`          | 📋 Plan      |
