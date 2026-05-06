@@ -142,6 +142,14 @@ def _init() -> None:
                 created_at      TEXT DEFAULT (datetime('now')),
                 UNIQUE(user_id, original_name)
             );
+            CREATE TABLE IF NOT EXISTS list_member (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_id  INTEGER NOT NULL REFERENCES shopping_list(id) ON DELETE CASCADE,
+                user_id  INTEGER NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+                role     TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
+                added_at TEXT DEFAULT (datetime('now')),
+                UNIQUE(list_id, user_id)
+            );
             CREATE TABLE IF NOT EXISTS search_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id     INTEGER NOT NULL REFERENCES user(id),
@@ -171,6 +179,14 @@ def _init() -> None:
         ph_cols = {row[1] for row in cursor.fetchall()}
         if "ean" not in ph_cols:
             conn.execute("ALTER TABLE price_history ADD COLUMN ean TEXT")
+        cursor.execute("PRAGMA table_info(shopping_list)")
+        sl_cols = {row[1] for row in cursor.fetchall()}
+        if "share_token" not in sl_cols:
+            conn.execute("ALTER TABLE shopping_list ADD COLUMN share_token TEXT")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_sl_share_token "
+                "ON shopping_list(share_token) WHERE share_token IS NOT NULL"
+            )
 
 
 _init()
@@ -670,16 +686,87 @@ def create_shopping_list(user_id: int, name: str) -> int:
 
 
 def get_shopping_lists(user_id: int) -> list[dict]:
+    """Returnerer egne lister + lister der brukeren er invitert som member."""
     with _conn() as conn:
         rows = conn.execute(
-            """SELECT sl.*, COUNT(sli.id) as item_count
+            """SELECT sl.*, COUNT(sli.id) as item_count,
+                      CASE WHEN sl.user_id = ? THEN 'owner' ELSE 'member' END as my_role,
+                      owner.name as owner_name
                FROM shopping_list sl
                LEFT JOIN shopping_list_item sli ON sl.id = sli.list_id
-               WHERE sl.user_id = ? AND sl.archived = 0
+               LEFT JOIN user owner ON sl.user_id = owner.id
+               WHERE sl.archived = 0
+                 AND (sl.user_id = ?
+                      OR sl.id IN (SELECT list_id FROM list_member WHERE user_id = ?))
                GROUP BY sl.id ORDER BY sl.created_at DESC""",
-            (user_id,),
+            (user_id, user_id, user_id),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def is_list_owner(list_id: int, user_id: int) -> bool:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM shopping_list WHERE id = ? AND user_id = ?", (list_id, user_id)
+        ).fetchone()
+    return row is not None
+
+
+def get_list_members(list_id: int) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT lm.role, lm.added_at, u.id as user_id, u.email, u.name
+               FROM list_member lm JOIN user u ON lm.user_id = u.id
+               WHERE lm.list_id = ? ORDER BY lm.added_at""",
+            (list_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_list_member(list_id: int, user_id: int, role: str = "member") -> None:
+    with _conn() as conn:
+        conn.execute(
+            """INSERT OR IGNORE INTO list_member (list_id, user_id, role) VALUES (?, ?, ?)""",
+            (list_id, user_id, role),
+        )
+
+
+def remove_list_member(list_id: int, user_id: int) -> None:
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM list_member WHERE list_id = ? AND user_id = ?", (list_id, user_id)
+        )
+
+
+def get_user_by_email(email: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT id, email, name FROM user WHERE email = ?", (email.strip().lower(),)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_or_create_share_token(list_id: int) -> str:
+    import secrets as _secrets
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT share_token FROM shopping_list WHERE id = ?", (list_id,)
+        ).fetchone()
+        if row and row["share_token"]:
+            return row["share_token"]
+        token = _secrets.token_urlsafe(12)
+        conn.execute(
+            "UPDATE shopping_list SET share_token = ? WHERE id = ?", (token, list_id)
+        )
+    return token
+
+
+def get_list_by_share_token(token: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM shopping_list WHERE share_token = ? AND archived = 0", (token,)
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def get_shopping_list_items(list_id: int) -> list[dict]:

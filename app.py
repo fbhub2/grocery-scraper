@@ -147,7 +147,24 @@ _DEFAULTS: dict = {
     "bulk_add_feedback": None,
     "kassal_results": {},
     "product_detail": None,  # {name, variant, store, price}
+    "join_feedback": None,   # melding etter ?join=<token>
 }
+
+# Håndter ?join=<token> — automatisk innmelding i delt liste
+_join_token = st.query_params.get("join")
+if _join_token:
+    _join_list = db.get_list_by_share_token(_join_token)
+    if _join_list:
+        if _join_list["user_id"] == _user_db_id:
+            st.session_state.join_feedback = ("info", "Dette er din egen liste.")
+        else:
+            db.add_list_member(_join_list["id"], _user_db_id)
+            st.session_state.join_feedback = ("success", f"Du er nå med i listen **{_join_list['name']}**!")
+            st.session_state.section = "handlelister"
+            st.session_state.active_list_id = _join_list["id"]
+    else:
+        st.session_state.join_feedback = ("warning", "Ugyldig eller utløpt invitasjonslenke.")
+    st.query_params.clear()
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -993,15 +1010,23 @@ def _show_handlelister() -> None:
             return
 
         for lst in lists:
+            is_owner = lst.get("my_role", "owner") == "owner"
+            icon = "👥 " if not is_owner else ""
+            owner_note = f" _(delt av {lst.get('owner_name', '?')})_" if not is_owner else ""
             c1, c2, c3 = st.columns([7, 1, 1])
-            c1.markdown(f"**{lst['name']}** — {lst['item_count']} varer")
+            c1.markdown(f"**{icon}{lst['name']}**{owner_note} — {lst['item_count']} varer")
             if c2.button("Åpne", key=f"open_{lst['id']}", use_container_width=True):
                 st.session_state.active_list_id = lst["id"]
                 st.session_state.liste_resultater = None
                 st.rerun()
-            if c3.button("🗑️", key=f"del_{lst['id']}", use_container_width=True, help="Slett liste"):
-                db.delete_shopping_list(lst["id"])
-                st.rerun()
+            if is_owner:
+                if c3.button("🗑️", key=f"del_{lst['id']}", use_container_width=True, help="Slett liste"):
+                    db.delete_shopping_list(lst["id"])
+                    st.rerun()
+            else:
+                if c3.button("✕", key=f"leave_{lst['id']}", use_container_width=True, help="Forlat liste"):
+                    db.remove_list_member(lst["id"], _user_db_id)
+                    st.rerun()
 
     else:
         lists = _user_lists()
@@ -1017,7 +1042,44 @@ def _show_handlelister() -> None:
             st.session_state.liste_resultater = None
             st.rerun()
 
-        st.title(f"🛒 {list_name}")
+        is_owner = list_info.get("my_role", "owner") == "owner"
+        title_icon = "🛒" if is_owner else "👥"
+        st.title(f"{title_icon} {list_name}")
+
+        # --- Del liste (kun eier) ---
+        if is_owner:
+            with st.expander("👥 Del liste"):
+                share_token = db.get_or_create_share_token(active_id)
+                base_url = st.query_params.get("_base_url", "http://localhost:8501")
+                join_url = f"{base_url}?join={share_token}"
+                st.caption("Send denne lenken til den du vil dele listen med:")
+                st.code(join_url, language=None)
+                st.caption("Alle med lenken som har logget inn kan bli med.")
+
+                st.divider()
+                st.markdown("**Legg til via e-post:**")
+                inv_email = st.text_input("E-post", placeholder="navn@eksempel.no", key=f"inv_email_{active_id}")
+                if st.button("Legg til", key=f"inv_add_{active_id}", type="primary"):
+                    found = db.get_user_by_email(inv_email.strip())
+                    if not found:
+                        st.warning("Ingen bruker funnet med den e-posten. Personen må ha logget inn minst én gang.")
+                    elif found["id"] == _user_db_id:
+                        st.info("Det er deg selv.")
+                    else:
+                        db.add_list_member(active_id, found["id"])
+                        st.success(f"✓ {found['name'] or found['email']} lagt til")
+                        st.rerun()
+
+                members = db.get_list_members(active_id)
+                if members:
+                    st.divider()
+                    st.markdown("**Nåværende members:**")
+                    for m in members:
+                        mc1, mc2 = st.columns([5, 1])
+                        mc1.markdown(f"{m['name'] or m['email']} _{m['role']}_")
+                        if mc2.button("✕", key=f"rm_member_{active_id}_{m['user_id']}", help="Fjern"):
+                            db.remove_list_member(active_id, m["user_id"])
+                            st.rerun()
 
         # Vis prissammenligning hvis tilgjengelig
         if st.session_state.liste_resultater is not None:
@@ -1196,6 +1258,10 @@ def _show_normalisering() -> None:
 
     st.divider()
 
+    # on_click-callback: settes FØR widget rendres → ingen konflikt
+    def _set_norm(key: str, value: str) -> None:
+        st.session_state[key] = value
+
     # Kolonneoverskrifter
     h1, h2, h3, h4, h5 = st.columns([3, 3, 3, 1, 1])
     h1.caption("**Original**")
@@ -1209,7 +1275,7 @@ def _show_normalisering() -> None:
         current_custom = row.get("custom_name") or ""
         key = f"norm_edit_{rid}"
 
-        # Pre-fill session state fra DB første gang
+        # Pre-fill fra DB første gang (før widget rendres, ingen konflikt)
         if key not in st.session_state:
             st.session_state[key] = current_custom
 
@@ -1222,13 +1288,18 @@ def _show_normalisering() -> None:
                 placeholder="Ditt navn (tomt = bruk auto)"
             )
         with c4:
-            if st.button("→", key=f"copy_orig_{rid}", help="Kopier original til 'Ditt navn'"):
-                st.session_state[key] = orig
-                st.rerun()
+            st.button(
+                "→", key=f"copy_orig_{rid}",
+                on_click=_set_norm, args=(key, orig),
+                help="Kopier original til 'Ditt navn'",
+            )
         with c5:
-            if auto and st.button("⟳", key=f"use_auto_{rid}", help="Bruk auto-normalisert"):
-                st.session_state[key] = auto
-                st.rerun()
+            if auto:
+                st.button(
+                    "⟳", key=f"use_auto_{rid}",
+                    on_click=_set_norm, args=(key, auto),
+                    help="Bruk auto-normalisert",
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -1293,6 +1364,11 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Hovedinnhold
 # ---------------------------------------------------------------------------
+
+if st.session_state.join_feedback:
+    level, msg = st.session_state.join_feedback
+    getattr(st, level)(msg)
+    st.session_state.join_feedback = None
 
 if st.session_state.show_admin and _is_admin:
     _admin_panel()
