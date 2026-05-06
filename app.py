@@ -585,9 +585,10 @@ def _show_search() -> None:
             st.warning("Skriv inn et søkeord.")
             st.stop()
         _show_fysiske = db.get_user_setting(_user_db_id, "vis_fysiske_butikker", "0") == "1"
+        _norm_query = normalize_search_term(query.strip())
         with st.spinner(f'Søker etter "{query.strip()}" ...'):
-            results, errors = run_search(query.strip(), int(limit))
-            kassal_results = run_kassal_search(query.strip()) if _show_fysiske else {}
+            results, errors = run_search(_norm_query, int(limit))
+            kassal_results = run_kassal_search(_norm_query) if _show_fysiske else {}
         converted: dict = {}
         for store, products in results.items():
             if store == "OBS 📰":
@@ -620,6 +621,7 @@ def _show_search() -> None:
         with_variant = f"{name} {variant}".strip().lower()
         return "⭐" if (name in _wl_names or with_variant in _wl_names) else ""
 
+    kassal_res = st.session_state.get("kassal_results", {})
     all_rows = [
         {
             "⭐": _on_wl(p, store),
@@ -631,6 +633,18 @@ def _show_search() -> None:
         }
         for store, prods in results.items()
         for p in prods
+    ] + [
+        {
+            "⭐": _on_wl(kp, kstore),
+            "Butikk": f"🏪 {kstore}",
+            "Produkt": kp.get("name"),
+            "Mengde": kp.get("variant") or "",
+            "Pris (kr)": kp["price"],
+            "Per enhet": kp.get("unit_price") or "",
+        }
+        for kstore, kprods in kassal_res.items()
+        for kp in kprods
+        if kstore not in ONLINE_STORES
     ]
 
     if all_rows:
@@ -638,7 +652,7 @@ def _show_search() -> None:
 
         f1, f2 = st.columns([3, 2])
         with f1:
-            available_stores = list(results.keys())
+            available_stores = sorted({r["Butikk"] for r in all_rows})
             valgte = st.multiselect(
                 "Vis butikker", available_stores, default=available_stores, key="filter_butikker"
             )
@@ -727,8 +741,14 @@ def _show_search() -> None:
 
     # --- Per-butikk kolonner ---
     _STORE_COLORS = {"Oda": "#005b96", "Meny": "#c0021b", "OBS 📰": "#d97706"}
-    stores_to_show = list(results.keys())
-    cols = st.columns(len(stores_to_show))
+    # Bygg samlet butikk-struktur: online scrapers + Kassal (uten duplikater)
+    all_store_data: dict[str, list] = {s: p for s, p in results.items()}
+    for ks, kp in kassal_res.items():
+        if ks not in ONLINE_STORES:
+            all_store_data[f"🏪 {ks}"] = kp
+
+    stores_to_show = list(all_store_data.keys())
+    cols = st.columns(max(len(stores_to_show), 1))
     for col, store in zip(cols, stores_to_show):
         with col:
             color = _STORE_COLORS.get(store, "#444444")
@@ -738,10 +758,10 @@ def _show_search() -> None:
             )
             if store in errors:
                 st.error(f"Feil: {errors[store]}")
-            elif not results.get(store):
+            elif not all_store_data.get(store):
                 st.info("Ingen resultater")
             else:
-                for i, p in enumerate(results[store]):
+                for i, p in enumerate(all_store_data[store]):
                     is_obs = store == "OBS 📰"
                     name = p.get("product_name") if is_obs else p.get("name")
                     price = p.get("price")
@@ -782,32 +802,7 @@ def _show_search() -> None:
                         if name and not is_obs:
                             _varsle_meg_popover(wl_name, price or 0.0, f"{store}_{i}")
 
-    # --- Kassal: andre butikker ---
-    kassal = st.session_state.get("kassal_results", {})
-    if kassal:
-        st.divider()
-        with st.expander(f"🛒 Andre butikker via Kassal ({sum(len(v) for v in kassal.values())} resultater)"):
-            kassal_cols = st.columns(min(len(kassal), 4))
-            for col, (kstore, kprods) in zip(kassal_cols, kassal.items()):
-                with col:
-                    st.markdown(f"**{kstore}**")
-                    for kp in kprods[:5]:
-                        with st.container(border=True):
-                            if kp.get("image_url"):
-                                st.image(kp["image_url"], width=60)
-                            st.markdown(f"**{kp['name']}**")
-                            if kp.get("variant"):
-                                st.caption(kp["variant"])
-                            st.markdown(f"**kr {kp['price']:.2f}**")
-                            if kp.get("unit_price"):
-                                st.badge(kp["unit_price"], color="blue")
-                            badge = _market_badge(kp["price"], _all_search_prices)
-                            if badge:
-                                st.caption(badge)
-                            if kp.get("url"):
-                                st.markdown(f"[Se produkt]({kp['url']})")
-    elif kassal_configured():
-        pass  # Kassal konfigurert men ingen resultater — ingen melding nødvendig
+    # Kassal-resultater er integrert i tabellen og per-butikk-kolonner ovenfor
 
 
 # ---------------------------------------------------------------------------
@@ -1157,53 +1152,83 @@ def _show_prishistorikk() -> None:
 def _show_normalisering() -> None:
     st.title("🏷️ Normalisering")
     st.caption(
-        "Endre visningsnavnet på produkter. "
-        "**Ditt navn** overstyrer auto-normalisert navn i hele appen."
+        "Sett ditt eget visningsnavn på produkter. "
+        "**Ditt navn** overstyrer auto-normalisert navn overalt i appen. "
+        "Tomt felt = bruk auto-normalisert."
     )
 
-    filter_text = st.text_input(
-        "Filtrer", placeholder="søk på produktnavn...", key="norm_filter"
-    )
+    nc1, nc2 = st.columns([4, 2])
+    filter_text = nc1.text_input("Filtrer", placeholder="søk på produktnavn...", key="norm_filter")
+    show_only_custom = nc2.toggle("Vis kun tilpassede", key="norm_only_custom")
 
     rows = db.list_normals_with_custom(_user_db_id, filter=filter_text or None)
     if not rows:
-        st.info(
-            "Ingen produktnavn registrert ennå. "
-            "Søk etter produkter for å bygge opp listen."
-        )
+        st.info("Ingen produktnavn ennå. Søk etter produkter for å bygge opp listen.")
         return
+
+    if show_only_custom:
+        rows = [r for r in rows if r.get("custom_name")]
 
     st.caption(f"{len(rows)} produktnavn")
 
-    df_orig = pd.DataFrame(rows)[["id", "original_name", "auto_name", "custom_name"]]
-    df_orig["custom_name"] = df_orig["custom_name"].fillna("")
-    df_display = df_orig.rename(columns={
-        "original_name": "Original",
-        "auto_name": "Auto-normalisert",
-        "custom_name": "Ditt navn",
-    })
+    # Bulk-handlinger
+    ba1, ba2, _ = st.columns([2, 2, 3])
+    if ba1.button("💾 Lagre alle endringer", type="primary"):
+        saved = 0
+        for row in rows:
+            key = f"norm_edit_{row['id']}"
+            current_db = row.get("custom_name") or ""
+            new_val = st.session_state.get(key, current_db)
+            if new_val != current_db:
+                db.set_custom_name_by_id(int(row["id"]), new_val, _user_db_id)
+                saved += 1
+        if saved:
+            st.success(f"✓ {saved} navn lagret")
+            st.rerun()
+        else:
+            st.info("Ingen endringer å lagre")
 
-    edited = st.data_editor(
-        df_display,
-        column_config={
-            "id": None,
-            "Original": st.column_config.TextColumn("Original", disabled=True),
-            "Auto-normalisert": st.column_config.TextColumn("Auto-normalisert", disabled=True),
-            "Ditt navn": st.column_config.TextColumn(
-                "Ditt navn", help="Tomt = bruk auto-normalisert navn"
-            ),
-        },
-        use_container_width=True,
-        hide_index=True,
-        key="norm_editor",
-    )
-
-    changed = edited[edited["Ditt navn"] != df_display["Ditt navn"]]
-    if not changed.empty:
-        for _, row in changed.iterrows():
-            db.set_custom_name_by_id(int(row["id"]), row["Ditt navn"] or "", _user_db_id)
-        st.success(f"✓ {len(changed)} navn lagret")
+    if ba2.button("🗑️ Fjern alle tilpassede"):
+        for row in rows:
+            if row.get("custom_name"):
+                db.set_custom_name_by_id(int(row["id"]), "", _user_db_id)
         st.rerun()
+
+    st.divider()
+
+    # Kolonneoverskrifter
+    h1, h2, h3, h4, h5 = st.columns([3, 3, 3, 1, 1])
+    h1.caption("**Original**")
+    h2.caption("**Auto-normalisert**")
+    h3.caption("**Ditt navn**")
+
+    for row in rows:
+        rid = row["id"]
+        orig = row["original_name"]
+        auto = row.get("auto_name") or ""
+        current_custom = row.get("custom_name") or ""
+        key = f"norm_edit_{rid}"
+
+        # Pre-fill session state fra DB første gang
+        if key not in st.session_state:
+            st.session_state[key] = current_custom
+
+        c1, c2, c3, c4, c5 = st.columns([3, 3, 3, 1, 1])
+        c1.markdown(f"`{orig}`")
+        c2.markdown(f"_{auto}_" if auto else "—")
+        with c3:
+            st.text_input(
+                "", key=key, label_visibility="collapsed",
+                placeholder="Ditt navn (tomt = bruk auto)"
+            )
+        with c4:
+            if st.button("→", key=f"copy_orig_{rid}", help="Kopier original til 'Ditt navn'"):
+                st.session_state[key] = orig
+                st.rerun()
+        with c5:
+            if auto and st.button("⟳", key=f"use_auto_{rid}", help="Bruk auto-normalisert"):
+                st.session_state[key] = auto
+                st.rerun()
 
 
 # ---------------------------------------------------------------------------

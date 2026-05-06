@@ -48,14 +48,39 @@ def parse_product_name(raw_name: str) -> dict:
 # ---------------------------------------------------------------------------
 
 COMPOUND_SPLITS = {
-    "lettmelk":        "lett melk",
-    "helmelk":         "hel melk",
-    "skummetmelk":     "skummet melk",
-    "kremfløte":       "krem fløte",
-    "havregryn":       "havre gryn",
-    "fullkornbrød":    "fullkorn brød",
-    "knekkebrød":      "knekke brød",
-    "jordbærsyltetøy": "jordbær syltetøy",
+    # Melk og meieri
+    "lettmelk":         "lett melk",
+    "helmelk":          "hel melk",
+    "skummetmelk":      "skummet melk",
+    "kremfløte":        "krem fløte",
+    "rømmedressing":    "rømme dressing",
+    "cottage cheese":   "cottage cheese",   # ikke compound, men alias-mapping
+    "crème fraîche":    "creme fraiche",
+    # Brød og korn
+    "havregryn":        "havre gryn",
+    "fullkornbrød":     "fullkorn brød",
+    "knekkebrød":       "knekke brød",
+    "grovbrød":         "grov brød",
+    "loffskiver":       "loff skiver",
+    # Syltetøy og pålegg
+    "jordbærsyltetøy":  "jordbær syltetøy",
+    "bringebærsyltetøy":"bringebær syltetøy",
+    "jordbærjam":       "jordbær jam",
+    "leverpostei":      "lever postei",
+    # Kjøtt og fisk
+    "kjøttdeig":        "kjøtt deig",
+    "kyllingfilet":     "kylling filet",
+    "laksfilet":        "laks filet",
+    "fiskefilet":       "fiske filet",
+    # Grønnsaker og frukt
+    "gulrotstappe":     "gulrot stappe",
+    "potetmos":         "potet mos",
+    # Drikke
+    "appelsinjuice":    "appelsin juice",
+    "eplejuice":        "eple juice",
+    "jordbærjuice":     "jordbær juice",
+    "mineralvann":      "mineral vann",
+    "farrisvann":       "farris vann",
 }
 
 # Reverse: join split compounds back to one word — brukes i normalize_search_term
@@ -87,6 +112,16 @@ def _normalize_volume_token(m: re.Match) -> str:
     return f"{number_str}{unit}"
 
 
+# Kjente merkevarer som fjernes fra auto_name for bedre matching på tvers av butikker.
+# Kun ord som aldri er produktbeskrivende (ikke f.eks. "Fjordland" som kan være merke OG sted).
+_BRAND_WORDS = {
+    "tine", "q-meieriene", "q meieriene", "bama", "mills", "stabburet",
+    "hansa", "ringnes", "maarud", "sætre", "freia", "nidar", "fazer",
+    "orkla", "norvegia", "jarlsberg", "kavli", "lerum", "nora",
+    "findus", "eismann", "felix", "vitana", "knorr", "maggi",
+}
+
+
 def auto_normalize(original_name: str) -> str:
     """
     Normaliser et produktnavn for lagring i normal.auto_name.
@@ -95,7 +130,8 @@ def auto_normalize(original_name: str) -> str:
       2. Lowercase
       3. Kjente sammensetninger via COMPOUND_SPLITS
       4. Volum/vekt-normalisering: '1L'/'1 liter' → '1l', '1000g' → '1kg'
-      5. Kollaps whitespace
+      5. Fjern kjente merkevarer
+      6. Kollaps whitespace
     """
     # 1. CamelCase: "TineLettmelk" → "Tine Lettmelk"
     text = re.sub(r'([a-z])([A-Z])', r'\1 \2', original_name)
@@ -106,8 +142,12 @@ def auto_normalize(original_name: str) -> str:
         text = re.sub(r'\b' + re.escape(compound) + r'\b', split, text)
     # 4. Volum-normalisering
     text = _UNIT_PATTERN.sub(_normalize_volume_token, text)
-    # 5. Kollaps whitespace
-    return re.sub(r'\s+', ' ', text).strip()
+    # 5. Fjern merkevarer (hele ord, case-insensitive allerede lowercased)
+    for brand in _BRAND_WORDS:
+        text = re.sub(r'\b' + re.escape(brand) + r'\b', '', text, flags=re.IGNORECASE)
+    # 6. Kollaps whitespace og fjern overflødige tegn
+    text = re.sub(r'[-–]+', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip().strip(',').strip()
 
 
 def resolve_name(original_name: str, user_id: int = None) -> str:
