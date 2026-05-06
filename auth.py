@@ -32,9 +32,13 @@ def _load_config() -> dict:
     }
 
 
-def get_auth_url() -> str:
+def get_auth_url(pending_join: str | None = None) -> str:
     cfg = _load_config()
     state = secrets.token_urlsafe(16)
+    if pending_join:
+        # Encode join token into state so it survives the OAuth redirect.
+        # Dots are not in token_urlsafe output, so ".join." is a safe separator.
+        state = f"{state}.join.{pending_join}"
     st.session_state["oauth_state"] = state
     params = {
         "client_id": cfg["client_id"],
@@ -99,12 +103,20 @@ def require_login() -> dict:
     # 1. OAuth callback fra Google
     if "code" in params:
         try:
+            # Extract join token from state if it was encoded before redirect
+            raw_state = params.get("state", "")
+            pending_join = None
+            if ".join." in raw_state:
+                _, pending_join = raw_state.split(".join.", 1)
+
             user = exchange_code_for_user(params["code"])
             token = secrets.token_urlsafe(32)
             _db.create_session(token, user)
             st.session_state["user"] = user
             st.query_params.clear()
             st.query_params["s"] = token
+            if pending_join:
+                st.query_params["join"] = pending_join
             st.rerun()
         except Exception as e:
             st.error(f"Innlogging feilet: {e}")
@@ -123,5 +135,8 @@ def require_login() -> dict:
     # 3. Vis login-side
     st.title("🛒 Prissammenligning")
     st.info("Logg inn med Google for å bruke appen.")
-    st.link_button("Logg inn med Google", get_auth_url())
+    pending_join = params.get("join")
+    if pending_join:
+        st.info("Du vil automatisk bli med i den delte listen etter innlogging.")
+    st.link_button("Logg inn med Google", get_auth_url(pending_join=pending_join))
     st.stop()
