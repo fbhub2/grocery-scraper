@@ -24,6 +24,8 @@ _ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 _is_admin = bool(_ADMIN_EMAIL) and _user.get("email") == _ADMIN_EMAIL
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
+ONLINE_STORES = {"Oda", "Meny"}
+KASSAL_STORE_LABEL = "🏪 Fysiske butikker (via Kassal)"
 
 
 # ---------------------------------------------------------------------------
@@ -411,9 +413,10 @@ def _show_search() -> None:
         if not query.strip():
             st.warning("Skriv inn et søkeord.")
             st.stop()
+        _show_fysiske = db.get_user_setting(_user_db_id, "vis_fysiske_butikker", "0") == "1"
         with st.spinner(f'Søker etter "{query.strip()}" ...'):
             results, errors = run_search(query.strip(), int(limit))
-            kassal_results = run_kassal_search(query.strip())
+            kassal_results = run_kassal_search(query.strip()) if _show_fysiske else {}
         converted: dict = {}
         for store, products in results.items():
             if store == "OBS 📰":
@@ -1045,6 +1048,20 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
+
+    if kassal_configured():
+        _vis_fysiske = db.get_user_setting(_user_db_id, "vis_fysiske_butikker", "0") == "1"
+        _ny_verdi = st.toggle(
+            "Vis fysiske butikker",
+            value=_vis_fysiske,
+            help="Inkluder priser fra Rema, Kiwi, Coop m.fl. via Kassal.app (kun prisreferanse — ikke netthandel)",
+            key="toggle_fysiske",
+        )
+        if _ny_verdi != _vis_fysiske:
+            db.set_user_setting(_user_db_id, "vis_fysiske_butikker", "1" if _ny_verdi else "0")
+            st.session_state.kassal_results = {}
+            st.rerun()
+        st.divider()
 
     _wl_triggered = sum(1 for w in db.get_watchlist(_user_db_id) if w["status"] == "triggered")
     _nav_items = [

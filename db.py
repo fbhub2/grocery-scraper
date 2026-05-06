@@ -85,6 +85,13 @@ def _init() -> None:
                 name       TEXT,
                 created_at TEXT DEFAULT (date('now'))
             );
+            CREATE TABLE IF NOT EXISTS user_settings (
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES user(id),
+                key     TEXT NOT NULL,
+                value   TEXT NOT NULL,
+                UNIQUE(user_id, key)
+            );
             CREATE TABLE IF NOT EXISTS user_normal (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id     INTEGER NOT NULL REFERENCES user(id),
@@ -538,6 +545,24 @@ def get_user_id(google_sub: str) -> int | None:
             "SELECT id FROM user WHERE google_sub = ?", (google_sub,)
         ).fetchone()
     return row["id"] if row else None
+
+
+def get_user_setting(user_id: int, key: str, default: str = "") -> str:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
+            (user_id, key),
+        ).fetchone()
+    return row["value"] if row else default
+
+
+def set_user_setting(user_id: int, key: str, value: str) -> None:
+    with _conn() as conn:
+        conn.execute(
+            """INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?)
+               ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value""",
+            (user_id, key, str(value)),
+        )
 
 
 # ---------------------------------------------------------------------------
