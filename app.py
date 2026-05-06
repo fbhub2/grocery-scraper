@@ -82,7 +82,7 @@ def run_search(query: str, limit: int) -> tuple[dict, dict]:
 
 
 def run_kassal_search(query: str, limit: int = 15) -> dict[str, list]:
-    """Hent resultater fra Kassal.app gruppert per butikknavn. Tom dict hvis ikke konfigurert."""
+    """Hent resultater fra Kassal.app gruppert per butikknavn. Lagrer priser til price_history."""
     if not kassal_configured():
         return {}
     products = kassal_search(query, limit=limit)
@@ -90,6 +90,13 @@ def run_kassal_search(query: str, limit: int = 15) -> dict[str, list]:
     for p in products:
         key = p.store_name or "Kassal"
         grouped.setdefault(key, []).append(p.to_dict())
+        try:
+            db.record_price(
+                p.name, key, p.price,
+                unit_price=p.unit_price, volume=p.variant, ean=p.ean,
+            )
+        except Exception:
+            pass
     return grouped
 
 
@@ -427,9 +434,21 @@ def _show_search() -> None:
     errors = st.session_state.search_errors
     already_added = _all_item_names()
 
+    _wl_items = db.get_watchlist(_user_db_id)
+    _wl_names = {w["original_name"].lower() for w in _wl_items}
+
     # --- Kombinert tabell ---
+    def _on_wl(p: dict, store: str) -> str:
+        if store == "OBS 📰":
+            return ""
+        name = (p.get("name") or "").lower()
+        variant = p.get("variant") or ""
+        with_variant = f"{name} {variant}".strip().lower()
+        return "⭐" if (name in _wl_names or with_variant in _wl_names) else ""
+
     all_rows = [
         {
+            "⭐": _on_wl(p, store),
             "Butikk": store,
             "Produkt": p.get("product_name") if store == "OBS 📰" else p.get("name"),
             "Mengde": p.get("volume") if store == "OBS 📰" else p.get("variant") or "",
@@ -461,7 +480,10 @@ def _show_search() -> None:
 
         selection = st.dataframe(
             df,
-            column_config={"Pris (kr)": st.column_config.NumberColumn(format="%.2f kr")},
+            column_config={
+                "⭐": st.column_config.TextColumn("⭐", width="small"),
+                "Pris (kr)": st.column_config.NumberColumn(format="%.2f kr"),
+            },
             use_container_width=True,
             hide_index=True,
             on_select="rerun",
@@ -471,7 +493,7 @@ def _show_search() -> None:
         selected_rows = selection.selection.rows if selection else []
         if selected_rows:
             lists = _user_lists()
-            ba1, ba2 = st.columns([2, 3])
+            ba1, ba2, ba3 = st.columns([2, 3, 2])
             with ba2:
                 if lists:
                     target = st.selectbox(
@@ -495,6 +517,20 @@ def _show_search() -> None:
                         "list_name": target, "list_id": lid, "count": added
                     }
                     st.rerun()
+            with ba3:
+                if st.button(f"⭐ Varsle valgte ({len(selected_rows)})", type="secondary"):
+                    added_wl = 0
+                    for row_idx in selected_rows:
+                        row_df = df.iloc[row_idx]
+                        pname = row_df.get("Produkt")
+                        pstore = row_df.get("Butikk", "")
+                        pprice = row_df.get("Pris (kr)", 0.0)
+                        if pname and pstore != "OBS 📰" and pname.lower() not in _wl_names:
+                            db.add_to_watchlist(_user_db_id, pname, "sale", None)
+                            added_wl += 1
+                    if added_wl:
+                        st.success(f"✓ {added_wl} varsel(er) lagt til")
+                        st.rerun()
 
     st.divider()
 
@@ -621,9 +657,15 @@ def _search_list_prices(items: list[dict]) -> None:
                         getattr(best, "variant", None)
                         or (best.get("variant") if isinstance(best, dict) else None)
                     )
+                    best_name = (
+                        getattr(best, "name", None)
+                        or (best.get("name") if isinstance(best, dict) else None)
+                        or vare
+                    )
                     row[store_name] = price
                     row[f"{store_name} (enhet)"] = unit_price or ""
                     row[f"{store_name} (variant)"] = variant or ""
+                    row[f"{store_name} (produkt)"] = f"{best_name}" + (f" · {variant}" if variant else "")
                     totals[store_name] += price * qty
                     db.record_price(vare, store_name, price, unit_price=unit_price, volume=variant)
                     t = db.get_price_trend(vare, store_name, volume=variant)
@@ -683,8 +725,10 @@ def _show_liste_resultater() -> None:
     col_config: dict = {}
     for s in STORES:
         col_config[s] = st.column_config.NumberColumn(s, format="%.2f kr")
-        col_config[f"{s} (enhet)"] = st.column_config.TextColumn(f"{s}/enhet")
-        col_config[f"{s} trend"] = st.column_config.TextColumn(f"{s} ↑↓")
+        col_config[f"{s} (enhet)"] = st.column_config.TextColumn(f"{s}/enhet", width="small")
+        col_config[f"{s} (variant)"] = None
+        col_config[f"{s} (produkt)"] = st.column_config.TextColumn(f"{s} produkt", width="medium")
+        col_config[f"{s} trend"] = st.column_config.TextColumn(f"{s} ↑↓", width="small")
 
     st.dataframe(
         pd.DataFrame(rows_display), column_config=col_config,
