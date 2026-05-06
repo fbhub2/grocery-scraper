@@ -122,6 +122,12 @@ Prioritert liste. Øverst = viktigst. Spec: GROCERY_SCRAPER_SPEC.md
 - [x] **Prishistorikk** (PR #2) — `price_history`-tabell, trend-kolonne
 - [x] **Prisvarsel** (PR #3) — `st.success()` banner + sidebar-badge
 
+### STEG 12 · `feature/single-product-view` ✅ mai 2026
+- [x] `app.py` — `_show_product_detail()`: alle butikker + markedspris + prishistorikk på én side
+- [x] `app.py` — 1 rad valgt i søketabell → "🔍 Vis detaljer →"-knapp
+- [x] `app.py` — Handlinger: legg i liste + varsle meg direkte fra detaljvisning
+- [x] `app.py` — Tilbake til søk uten å miste søkeresultater
+
 ---
 
 ## 🪦 Parkert

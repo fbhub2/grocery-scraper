@@ -146,6 +146,7 @@ _DEFAULTS: dict = {
     "wl_add_name": None,
     "bulk_add_feedback": None,
     "kassal_results": {},
+    "product_detail": None,  # {name, variant, store, price}
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -383,10 +384,124 @@ def _legg_til_popover(name: str, key_suffix: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Seksjon: Produktdetalj (STEG 12)
+# ---------------------------------------------------------------------------
+
+def _show_product_detail() -> None:
+    pd_info = st.session_state.product_detail
+    name: str = pd_info["name"]
+    variant: str = pd_info.get("variant") or ""
+    orig_store: str = pd_info.get("store") or ""
+
+    if st.button("← Tilbake til søk"):
+        st.session_state.product_detail = None
+        st.rerun()
+
+    display_name = f"{name} · {variant}" if variant else name
+    st.title(display_name)
+    if orig_store:
+        st.caption(f"Opprinnelig fra: {orig_store}")
+
+    query = normalize_search_term(name)
+    _show_fysiske = db.get_user_setting(_user_db_id, "vis_fysiske_butikker", "0") == "1"
+
+    with st.spinner("Henter priser fra alle butikker …"):
+        results, _ = run_search(query, 10)
+        kassal = run_kassal_search(query, limit=20) if _show_fysiske else {}
+
+    all_prices: list[dict] = []
+    for store, prods in results.items():
+        if store == "OBS 📰":
+            continue
+        for p in prods:
+            pd_dict = p.to_dict() if hasattr(p, "to_dict") else p
+            price = pd_dict.get("price")
+            if price is None:
+                continue
+            all_prices.append({
+                "Butikk": store,
+                "Produkt": pd_dict.get("name") or name,
+                "Mengde": pd_dict.get("variant") or "",
+                "Pris (kr)": float(price),
+                "Per enhet": pd_dict.get("unit_price") or "",
+                "URL": pd_dict.get("url") or "",
+                "_online": True,
+            })
+    for store, prods in kassal.items():
+        for p in prods:
+            price = p.get("price")
+            if price is None:
+                continue
+            all_prices.append({
+                "Butikk": f"🏪 {store}",
+                "Produkt": p.get("name") or name,
+                "Mengde": p.get("variant") or "",
+                "Pris (kr)": float(price),
+                "Per enhet": p.get("unit_price") or "",
+                "URL": p.get("url") or "",
+                "_online": False,
+            })
+
+    if not all_prices:
+        st.info("Ingen priser funnet for dette produktet.")
+    else:
+        all_prices.sort(key=lambda x: x["Pris (kr)"])
+        cheapest = all_prices[0]
+        st.success(
+            f"💰 Billigst: **{cheapest['Butikk']}** — kr {cheapest['Pris (kr)']:.2f}"
+            + (f"  ·  {cheapest['Per enhet']}" if cheapest["Per enhet"] else "")
+        )
+
+        df_p = pd.DataFrame([{k: v for k, v in r.items() if not k.startswith("_")} for r in all_prices])
+        st.dataframe(
+            df_p,
+            column_config={"Pris (kr)": st.column_config.NumberColumn(format="%.2f kr")},
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    # Handlinger
+    st.divider()
+    wl_name = display_name if variant else name
+    act1, act2 = st.columns(2)
+    with act1:
+        _legg_til_popover(name, f"det_{name[:12]}")
+    with act2:
+        ref_price = all_prices[0]["Pris (kr)"] if all_prices else pd_info.get("price", 0.0)
+        _varsle_meg_popover(wl_name, ref_price, f"det_{name[:12]}")
+
+    # Prishistorikk
+    st.divider()
+    st.subheader("📈 Prishistorikk")
+    history = db.get_price_history(name, days=90)
+    if history:
+        df_h = pd.DataFrame(history)
+        df_h["recorded_at"] = pd.to_datetime(df_h["recorded_at"]).dt.floor("D")
+        df_pivot = (
+            df_h.pivot_table(index="recorded_at", columns="store", values="price", aggfunc="mean")
+            .sort_index()
+        )
+        st.line_chart(df_pivot, height=250)
+        with st.expander("Vis rådata"):
+            st.dataframe(
+                df_h[["recorded_at", "store", "price", "unit_price"]].rename(
+                    columns={"recorded_at": "Dato", "store": "Butikk", "price": "Pris", "unit_price": "Per enhet"}
+                ).sort_values("Dato", ascending=False),
+                use_container_width=True, hide_index=True,
+            )
+    else:
+        st.caption("Ingen prishistorikk ennå — søk priser for en handleliste for å bygge opp data.")
+
+
+# ---------------------------------------------------------------------------
 # Seksjon: Søk
 # ---------------------------------------------------------------------------
 
 def _show_search() -> None:
+    if st.session_state.product_detail:
+        _show_product_detail()
+        return
+
     st.title("🔍 Søk")
 
     with st.form("search_form"):
@@ -494,6 +609,17 @@ def _show_search() -> None:
         )
 
         selected_rows = selection.selection.rows if selection else []
+        if len(selected_rows) == 1:
+            row_sel = df.iloc[selected_rows[0]]
+            if row_sel.get("Butikk") != "OBS 📰" and row_sel.get("Produkt"):
+                if st.button("🔍 Vis detaljer →", type="secondary", key="btn_detail"):
+                    st.session_state.product_detail = {
+                        "name": row_sel["Produkt"],
+                        "variant": row_sel.get("Mengde") or "",
+                        "store": row_sel.get("Butikk") or "",
+                        "price": row_sel.get("Pris (kr)") or 0.0,
+                    }
+                    st.rerun()
         if selected_rows:
             lists = _user_lists()
             ba1, ba2, ba3 = st.columns([2, 3, 2])
