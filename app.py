@@ -971,10 +971,14 @@ def _show_liste_resultater() -> None:
         if not prices:
             continue
         cheapest_store = min(prices, key=prices.get)
-        vare_label = row.get("Vare", row.get("_navn", ""))
+        product_label = (
+            row.get(f"{cheapest_store} (produkt)")
+            or row.get("Vare", "")
+        )
         qty = row.get("Antall", 1)
         qty_str = f" × {qty}" if qty > 1 else ""
-        plan.setdefault(cheapest_store, []).append(f"{vare_label}{qty_str}")
+        price_str = f" — kr {prices[cheapest_store]:.2f}"
+        plan.setdefault(cheapest_store, []).append(f"{product_label}{qty_str}{price_str}")
 
     if plan:
         plan_cols = st.columns(len(plan))
