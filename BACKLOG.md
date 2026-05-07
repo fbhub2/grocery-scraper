@@ -81,6 +81,28 @@ Prioritert liste. Øverst = viktigst.
 
 ---
 
+## 🗄️ DB-persistens (avventer beslutning)
+
+**Problem:** Streamlit Community Cloud har efemær disk — `grocery.db` slettes ved redeploy/restart.
+Data som går tapt: brukere, familier, handlelister, normalisering, varslingsliste, prishistorikk.
+
+**Vurderte alternativer (mai 2026):**
+
+| Alternativ | Kodeendring i db.py | Kostnad | Notat |
+|---|---|---|---|
+| **Neon PostgreSQL** | ~950 linjer, mekanisk | Gratis | Anbefalt hvis PG velges. Bruk transformasjons-script for ~80%, fiks resten manuelt. Estimat: ½–1 kontekstvindu |
+| **Fly.io + persistent volum** | Null | ~$3/mnd | Kun Dockerfile + fly.toml. SQLite uendret. Bytter bort Streamlit Cloud |
+| **SQLite Cloud** | Minimal (kun `_conn()`) | Gratis | Drop-in sqlite3-kompatibel. Nyere tjeneste, noe usikkerhet |
+
+**Neon-detaljer hvis valgt:**
+- To drivers = to SQL-dialekter → bruk Neon for **begge** miljøer (dev-branch + prod-branch), ikke SQLite lokalt
+- Neon støtter DB-branching (som git) — `dev`-branch for lokal test, `main`-branch for prod
+- Endringer: `?`→`%s`, `AUTOINCREMENT`→`SERIAL`, `INSERT OR IGNORE`→`ON CONFLICT DO NOTHING`, `lastrowid`→`RETURNING id`, fjern `PRAGMA`, fjern migrasjons-seksjonen
+
+**Beslutning:** Avventer. SQLite beholdes til første prod-release. Revurder etter at driftsbehovet er klart.
+
+---
+
 ## 🪦 Parkert
 - ~~Rema 1000~~ — API ikke-funksjonelt
-- ~~Supabase~~ — SQLite foretrekkes
+- ~~Supabase~~ — SQLite foretrekkes (se DB-persistens over)
