@@ -58,6 +58,50 @@ mittprosjekt/
 - `split_name_variant()` beholder prosent-tokens (0,5%, 3,5%) i produktnavnet — prosent er produkttype, ikke mengde
 - OBS-data importeres via `import_obs_catalog` MCP-tool — ikke live scraping
 
+## UI/UX-analyse med Playwright MCP
+
+Playwright MCP er satt opp for interaktiv UI-testing og analyse direkte mot kjørende app.
+
+### Når brukes det
+| Oppgave | Verktøy | Token-kostnad |
+|---|---|---|
+| Bug-fix (finne feilmelding, sjekke state) | DOM + console — ingen screenshot | Lav |
+| Bug-find (navigere, klikke, utforske flyt) | Klikk + DOM | Lav–middels |
+| UX-analyse (visuell layout, kontrast, flow) | Målrettet screenshot | Middels |
+
+Ta aldri full-side screenshot uten grunn — bruk heller `locator`-baserte screenshots av én komponent.
+
+### Forutsetning
+Appen må kjøre lokalt:
+```bash
+streamlit run app.py   # → http://localhost:8501
+```
+
+### Konfigurasjon
+- **Claude Code:** `.mcp.json` i prosjektrot (sjekket inn i git)
+- **Claude Desktop:** `AppData/Roaming/Claude/claude_desktop_config.json`
+- Browser: Chromium, headless
+- Package: `@playwright/mcp@0.0.74` (global npm)
+- Playwright: v1.59.1
+
+### Typiske instruksjoner til meg
+```
+# Bug-find
+"Gå til localhost:8501, logg inn, åpne handleliste, søk etter 'melk' og sjekk at handleplan viser produktnavn"
+
+# UX-analyse
+"Ta screenshot av søkeresultattabellen og vurder lesbarhet og kolonnebredder"
+
+# Regresjonstest
+"Verifiser at familie-delingskode-flyten fungerer — opprett familie, kopier kode, bli med"
+```
+
+### Reinstallasjon ved behov
+```bash
+npm install -g @playwright/mcp
+npx playwright install chromium
+```
+
 ## Kjente gotchas
 - Ikke godkjenn `/init`-diff uten å lese den — `/init` har fjernet viktige seksjoner tidligere
 - Store refaktoringer: bruk alltid `--plan` først
