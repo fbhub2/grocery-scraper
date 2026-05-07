@@ -948,6 +948,7 @@ def _show_liste_resultater() -> None:
     )
     for i, store in enumerate(STORES, 1):
         delta = totals[store] - optimal_total
+        missing = mangler.get(store, [])
         m_cols[i].metric(
             store,
             f"kr {store_best_sums[store]:.2f}",
@@ -958,6 +959,10 @@ def _show_liste_resultater() -> None:
             ),
             delta_color="off",
         )
+        if missing:
+            m_cols[i].caption(
+                f"⚠️ {len(missing)} vare(r) ikke funnet her — totalen er ufullstendig"
+            )
     for store, missing in mangler.items():
         if missing:
             st.warning(f"{store}: ingen treff for: {', '.join(missing)}")
