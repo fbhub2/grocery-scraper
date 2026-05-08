@@ -35,14 +35,15 @@ def search(query: str, limit: int = 5) -> list[Product]:
         full = f"{src.get('title', '')} {hit.get('description', '')}".strip()
         name, variant = split_name_variant(full)
 
-        product_id = str(src.get("ean") or src.get("productId") or "")
+        ean = str(src.get("ean") or "")
+        product_id = ean or str(src.get("productId") or "")
         if product_id and product_id in seen_ids:
             continue
         seen_ids.add(product_id)
 
         try:
             if product_id:
-                db.upsert_product(product_id, name, store_id)
+                db.upsert_product(product_id, name, store_id, ean=ean or None)
             db.upsert_normal(name)
         except Exception:
             pass
@@ -58,6 +59,7 @@ def search(query: str, limit: int = 5) -> list[Product]:
                     f"https://bilder.ngdata.no/{src['imagePath']}/large.jpg"
                     if src.get("imagePath") else None
                 ),
+                ean=ean or None,
             )
         )
         if len(products) >= limit:
