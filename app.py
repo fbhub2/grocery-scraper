@@ -251,6 +251,50 @@ def _admin_panel() -> None:
             from tasks import run_auto_normalize
             n = run_auto_normalize(force=True)
             st.success(f"✓ {n} produktnavn oppdatert")
+
+    st.divider()
+    st.subheader("EAN-dekning")
+
+    ean_rows = conn.execute(
+        """SELECT s.name as butikk,
+                  COUNT(*) as totalt,
+                  SUM(CASE WHEN p.ean IS NOT NULL THEN 1 ELSE 0 END) as med_ean
+           FROM product p JOIN store s ON p.store_id = s.id
+           GROUP BY s.name ORDER BY s.name"""
+    ).fetchall()
+    if ean_rows:
+        import pandas as pd
+        ean_df = pd.DataFrame([dict(r) for r in ean_rows])
+        ean_df["dekning"] = ean_df.apply(
+            lambda r: f"{r['med_ean']}/{r['totalt']} ({100*r['med_ean']//r['totalt']}%)"
+            if r["totalt"] else "–", axis=1
+        )
+        st.dataframe(ean_df[["butikk", "totalt", "med_ean", "dekning"]],
+                     use_container_width=True, hide_index=True)
+    else:
+        st.caption("Ingen produkter i DB ennå")
+
+    st.markdown("**Kryssbutikk-treff (samme EAN, flere butikker)**")
+    cross_rows = conn.execute(
+        """SELECT p.ean,
+                  GROUP_CONCAT(s.name, ' · ') as butikker,
+                  COUNT(DISTINCT p.store_id) as antall_butikker,
+                  MIN(p.original_name) as produktnavn
+           FROM product p JOIN store s ON p.store_id = s.id
+           WHERE p.ean IS NOT NULL
+           GROUP BY p.ean
+           HAVING COUNT(DISTINCT p.store_id) > 1
+           ORDER BY antall_butikker DESC, p.ean
+           LIMIT 100"""
+    ).fetchall()
+    if cross_rows:
+        cross_df = pd.DataFrame([dict(r) for r in cross_rows])
+        st.dataframe(cross_df[["ean", "produktnavn", "butikker", "antall_butikker"]],
+                     use_container_width=True, hide_index=True)
+        st.caption(f"{len(cross_df)} EAN-koder funnet i flere butikker")
+    else:
+        st.caption("Ingen kryssbutikk-treff ennå — søk etter produkter for å bygge opp data")
+
     conn.close()
 
 

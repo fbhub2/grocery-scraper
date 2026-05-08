@@ -201,6 +201,14 @@ def _init() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_sl_share_token "
                 "ON shopping_list(share_token) WHERE share_token IS NOT NULL"
             )
+        cursor.execute("PRAGMA table_info(product)")
+        prod_cols = {row[1] for row in cursor.fetchall()}
+        if "ean" not in prod_cols:
+            conn.execute("ALTER TABLE product ADD COLUMN ean TEXT")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_product_ean "
+                "ON product(ean) WHERE ean IS NOT NULL"
+            )
 
 
 _init()
@@ -432,16 +440,54 @@ def ensure_store(name: str) -> int:
         return conn.execute("SELECT id FROM store WHERE name = ?", (name,)).fetchone()["id"]
 
 
-def upsert_product(product_id: str, original_name: str, store_id: int) -> int:
+def upsert_product(product_id: str, original_name: str, store_id: int, ean: str = None) -> int:
+    ean = ean or None
     with _conn() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO product (product_id, original_name, store_id) VALUES (?, ?, ?)",
-            (product_id, original_name, store_id),
+            "INSERT OR IGNORE INTO product (product_id, original_name, store_id, ean) VALUES (?, ?, ?, ?)",
+            (product_id, original_name, store_id, ean),
         )
+        if ean:
+            conn.execute(
+                "UPDATE product SET ean = ? WHERE product_id = ? AND store_id = ? AND ean IS NULL",
+                (ean, product_id, store_id),
+            )
         return conn.execute(
             "SELECT id FROM product WHERE product_id = ? AND store_id = ?",
             (product_id, store_id),
         ).fetchone()["id"]
+
+
+def get_products_by_ean(ean: str) -> list[dict]:
+    """Alle butikker som har et produkt med denne EAN."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT p.id, p.product_id, p.original_name, p.ean, s.name as store_name
+               FROM product p JOIN store s ON p.store_id = s.id
+               WHERE p.ean = ?""",
+            (ean,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def compare_by_ean(ean: str) -> list[dict]:
+    """Kryssbutikk-sammenligning for én EAN: siste pris per butikk."""
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT s.name as store_name, p.original_name, p.product_id,
+                      pph.price, pph.date
+               FROM product p
+               JOIN store s ON p.store_id = s.id
+               LEFT JOIN product_price_history pph ON pph.product_id = p.id
+               WHERE p.ean = ?
+               AND (pph.date = (
+                   SELECT MAX(h2.date) FROM product_price_history h2
+                   WHERE h2.product_id = p.id
+               ) OR pph.date IS NULL)
+               ORDER BY pph.price ASC NULLS LAST""",
+            (ean,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_products(store_id: int = None) -> list[dict]:

@@ -1,6 +1,7 @@
 import os
 import re
 import httpx
+import db
 from .base import Product, split_name_variant
 
 _BASE_URL = "https://kassal.app/api/v1"
@@ -70,7 +71,7 @@ def search(query: str, limit: int = 10) -> list[Product]:
 
         store_info = item.get("store") or {}
         store_name = store_info.get("name", "Kassal")
-        ean = item.get("ean")
+        ean = item.get("ean") or None
 
         key = (ean or raw_name.lower(), store_name)
         if key in seen:
@@ -92,6 +93,13 @@ def search(query: str, limit: int = 10) -> list[Product]:
             unit_price_str = f"{api_unit_price:.2f} kr/enhet"
         else:
             unit_price_str = _calc_unit_price(float(price), variant)
+
+        try:
+            store_id = db.ensure_store(store_name)
+            product_key = ean or (clean_name or raw_name).lower()
+            db.upsert_product(product_key, clean_name or raw_name, store_id, ean=ean)
+        except Exception:
+            pass
 
         products.append(Product(
             name=clean_name or raw_name,
