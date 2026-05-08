@@ -1222,6 +1222,48 @@ def _show_handlelister() -> None:
                 )
                 st.rerun()
 
+        # Importer produkter
+        with st.expander("📥 Importer produkter"):
+            st.caption(
+                "Lim inn en liste med produktnavn — ett per linje, "
+                "eller skilt med komma / semikolon."
+            )
+            with st.form(f"import_form_{active_id}", clear_on_submit=True):
+                import_dest = st.radio(
+                    "Legg til i",
+                    ["Aktiv liste", "Ny liste"],
+                    horizontal=True,
+                    key=f"import_dest_{active_id}",
+                )
+                new_list_name = st.text_input(
+                    "Navn på ny liste",
+                    placeholder="f.eks. Ukeshandel",
+                    disabled=(import_dest == "Aktiv liste"),
+                )
+                raw_input = st.text_area(
+                    "Produkter",
+                    placeholder="melk\nbrød\negg, smør\nhavremel; appelsinjuice",
+                    height=150,
+                )
+                if st.form_submit_button("Importer", type="primary"):
+                    lines = raw_input.replace(";", "\n").replace(",", "\n").splitlines()
+                    names = [n.strip() for n in lines if n.strip()]
+                    if not names:
+                        st.warning("Ingen produkter å importere.")
+                    elif import_dest == "Ny liste":
+                        target_name = new_list_name.strip() or "Importert liste"
+                        new_id = db.create_shopping_list(_user_db_id, target_name)
+                        for n in names:
+                            db.add_to_shopping_list(new_id, n)
+                        st.success(f"✓ Opprettet «{target_name}» med {len(names)} varer.")
+                        st.session_state.active_list_id = new_id
+                        st.rerun()
+                    else:
+                        for n in names:
+                            db.add_to_shopping_list(active_id, n)
+                        st.success(f"✓ La til {len(names)} varer i listen.")
+                        st.rerun()
+
 
 # ---------------------------------------------------------------------------
 # Seksjon: Prishistorikk
