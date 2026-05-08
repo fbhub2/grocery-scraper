@@ -383,6 +383,9 @@ def _show_varslingsliste() -> None:
                     db.remove_from_watchlist(_user_db_id, w["original_name"])
                     st.rerun()
 
+    st.divider()
+    _prishistorikk_expander("vl_")
+
 
 # ---------------------------------------------------------------------------
 # "Legg i liste"-popover (brukes i søkeresultater)
@@ -828,6 +831,8 @@ def _show_search() -> None:
                             _varsle_meg_popover(wl_name, price or 0.0, f"{store}_{i}")
 
     # Kassal-resultater er integrert i tabellen og per-butikk-kolonner ovenfor
+    st.divider()
+    _prishistorikk_expander("sok_")
 
 
 # ---------------------------------------------------------------------------
@@ -1222,14 +1227,15 @@ def _show_handlelister() -> None:
                 )
                 st.rerun()
 
+    st.divider()
+    _prishistorikk_expander("hl_")
+
 
 # ---------------------------------------------------------------------------
 # Seksjon: Prishistorikk
 # ---------------------------------------------------------------------------
 
-def _show_prishistorikk() -> None:
-    st.title("📈 Prishistorikk")
-
+def _prishistorikk_content(key_prefix: str = "") -> None:
     products = db.get_products_with_history()
     if not products:
         st.info(
@@ -1240,9 +1246,9 @@ def _show_prishistorikk() -> None:
 
     c1, c2 = st.columns([4, 2])
     with c1:
-        selected = st.selectbox("Velg produkt", products, key="ph_product")
+        selected = st.selectbox("Velg produkt", products, key=f"{key_prefix}ph_product")
     with c2:
-        days = st.slider("Dager tilbake", 7, 365, 30, key="ph_days")
+        days = st.slider("Dager tilbake", 7, 365, 30, key=f"{key_prefix}ph_days")
 
     if not selected:
         return
@@ -1257,7 +1263,6 @@ def _show_prishistorikk() -> None:
 
     stores_in_data = sorted(df["store"].unique())
 
-    # Linjediagram — én linje per butikk, aggregert per dag
     df_pivot = (
         df.pivot_table(index="recorded_at", columns="store", values="price", aggfunc="mean")
         .sort_index()
@@ -1265,7 +1270,6 @@ def _show_prishistorikk() -> None:
     st.subheader(f"{selected.capitalize()}")
     st.line_chart(df_pivot, height=300)
 
-    # Statistikk per butikk
     stat_cols = st.columns(len(stores_in_data))
     for col, store in zip(stat_cols, stores_in_data):
         sdf = df[df["store"] == store].sort_values("recorded_at")
@@ -1281,7 +1285,6 @@ def _show_prishistorikk() -> None:
             help=f"Min: {min_p:.2f} kr  /  Maks: {max_p:.2f} kr  /  {len(sdf)} målinger",
         )
 
-    # Rådata-tabell (collapsable)
     with st.expander("Vis rådata"):
         df_show = df[["recorded_at", "store", "price", "unit_price"]].copy()
         df_show.columns = ["Tidspunkt", "Butikk", "Pris (kr)", "Per enhet"]
@@ -1292,6 +1295,16 @@ def _show_prishistorikk() -> None:
             use_container_width=True,
             hide_index=True,
         )
+
+
+def _show_prishistorikk() -> None:
+    st.title("📈 Prishistorikk")
+    _prishistorikk_content()
+
+
+def _prishistorikk_expander(key_prefix: str) -> None:
+    with st.expander("📈 Prishistorikk"):
+        _prishistorikk_content(key_prefix=key_prefix)
 
 
 # ---------------------------------------------------------------------------
@@ -1433,7 +1446,6 @@ with st.sidebar:
         ("🔍 Søk", "søk"),
         ("🛒 Handlelister", "handlelister"),
         (f"⭐ Varslingsliste{f' ({_wl_triggered})' if _wl_triggered else ''}", "varslingsliste"),
-        ("📈 Prishistorikk", "prishistorikk"),
         ("🏷️ Normalisering", "normalisering"),
     ]
     for _label, _key in _nav_items:
@@ -1467,7 +1479,5 @@ elif st.session_state.section == "handlelister":
     _show_handlelister()
 elif st.session_state.section == "varslingsliste":
     _show_varslingsliste()
-elif st.session_state.section == "prishistorikk":
-    _show_prishistorikk()
 elif st.session_state.section == "normalisering":
     _show_normalisering()
