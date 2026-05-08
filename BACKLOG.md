@@ -64,6 +64,60 @@ Prioritert liste. Øverst = viktigst.
 
 ## 📋 Planlagt
 
+### `feature/ean-core` ✅ klar for merge — mai 2026
+- [x] `product.ean` kolonne + indeks (migrasjon)
+- [x] `upsert_product()` tar EAN-parameter
+- [x] `get_products_by_ean()` og `compare_by_ean()` for kryssbutikk-matching
+- [x] Meny-scraper: EAN i Product-objekt og DB
+- [x] Kassal-scraper: persisterer til DB med EAN
+- [x] Admin: EAN-dekning per butikk + kryssbutikk-treff-tabell
+- **Oda:** ingen EAN i API (verifisert) — bruker intern numerisk ID
+
+### `feature/prishistorikk-inline` ✅ klar for merge — mai 2026
+- [x] Prishistorikk fjernet fra venstremenyen
+- [x] Prishistorikk som collapsbar expander nederst på Søk, Handlelister og Varslingsliste
+
+### `feature/import-handleliste` ✅ klar for merge — mai 2026
+- [x] "Importer produkter"-ekspander i aktiv handleliste
+- [x] Støtter linjeskift, komma og semikolon som skilletegn
+- [x] Kan legge til i aktiv liste eller opprette ny liste
+
+### `feature/produkt-ikoner` — neste sprint
+**Mål:** Alle produkter (tabell og kortvisning) får fire handlingsikoner:
+
+| Ikon | Funksjon | Merknad |
+|---|---|---|
+| 🔔 | Legg til/fjern varsling | Toggle on/off, erstatter `_varsle_meg_popover()` |
+| 📋 | Legg til/fjern handleliste | Toggle on/off, erstatter `_legg_til_popover()` |
+| 👁️ | Vis produkt i butikk | Åpne produkt-URL i ny fane |
+| 🔍 | Søk på dette produktet | Pre-fyller søkefeltet med produktnavnet |
+
+**Teknisk:**
+- `st.dataframe()` støtter ikke custom knapper per rad → ikonene går **under tabellen** for valgte rader, og **direkte i kortene** i kortvisningen
+- Ny hjelpefunksjon `_produkt_ikoner(name, price, url, key_suffix)` brukes på tvers av alle visningstyper
+- ISSUE-07 kan delvis løses her ved å bruke EAN som nøkkel for handleliste-tillegg
+
+### `feature/kassal-inline` — neste sprint
+**Mål:** Kassal-resultater vises på lik linje med Oda og Meny overalt.
+
+**Endringer:**
+- Fjern "🏪"-prefiks fra Kassal-butikknavn i tabeller (behold som tooltip/badge i stedet)
+- Inkluder Kassal-butikker i **optimal handleplan** (kun fysiske butikker om "vis fysiske" er på)
+- Kassal søkes parallelt med Oda/Meny i `run_search()` (ikke separat `run_kassal_search()`) når toggle er på
+- Brukerinnstilling kontrollerer om Kassal inkluderes i prissammenlignings-tabellen
+
+### `feature/nearest-store` — backlog
+**Mål:** Vis hvilken Kassal-butikk som er nærmest brukeren.
+
+**Forutsetninger som må avklares:**
+- Kassal API: sjekk om `/stores` eller `/products`-endepunkt returnerer butikkens GPS-koordinater eller adresse
+- Geolokasjon: Streamlit støtter ikke browser geolocation nativt — alternativ: postnummer-input fra bruker
+- Mulig tilnærming: bruker taster postnummer → lookup mot postnummer→koordinat-tabell → beregn avstand til Kassal-butikker
+
+**Avhenger av:** `feature/kassal-inline`
+
+---
+
 ### STEG 14 · `feature/obs-import-v2`
 - OBS-tilbudsavis: automatisk refresh (tasks.py), utløpsdato-håndtering
 - **Langsiktig:** lage egen Ollama-lokal → MCP → prod-db
