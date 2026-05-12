@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, str(Path(__file__).parent))
 from scrapers import oda_search, meny_search
 from scrapers.kassal import search as kassal_search, is_configured as kassal_configured
+from scrapers.kassal_stores import fetch_physical_stores, postnummer_to_coords, nearest_stores
 import os
 import sqlite3
 import db
@@ -148,6 +149,7 @@ _DEFAULTS: dict = {
     "kassal_results": {},
     "product_detail": None,  # {name, variant, store, price}
     "join_feedback": None,   # melding etter ?join=<token>
+    "kassal_stores_cache": None,
 }
 
 # Håndter ?join=<token> — automatisk innmelding i delt liste
@@ -1525,6 +1527,41 @@ with st.sidebar:
             db.set_user_setting(_user_db_id, "vis_fysiske_butikker", "1" if _ny_verdi else "0")
             st.session_state.kassal_results = {}
             st.rerun()
+
+        # --- Nærmeste butikker ---
+        _saved_pnr = db.get_user_setting(_user_db_id, "postnummer", "")
+        _pnr_input = st.text_input(
+            "📍 Ditt postnummer",
+            value=_saved_pnr,
+            max_chars=4,
+            placeholder="f.eks. 0179",
+            key="pnr_input",
+            help="Brukes til å vise nærmeste fysiske butikker",
+        )
+        if _pnr_input.strip() != _saved_pnr:
+            db.set_user_setting(_user_db_id, "postnummer", _pnr_input.strip())
+            st.session_state.kassal_stores_cache = None
+            st.rerun()
+
+        if _pnr_input.strip():
+            with st.expander("📍 Nærmeste butikker"):
+                if st.session_state.kassal_stores_cache is None:
+                    with st.spinner("Henter butikker..."):
+                        st.session_state.kassal_stores_cache = fetch_physical_stores()
+                all_phys = st.session_state.kassal_stores_cache or []
+                coords = postnummer_to_coords(_pnr_input.strip())
+                if coords and all_phys:
+                    near = nearest_stores(coords[0], coords[1], all_phys, limit=8)
+                    for s in near:
+                        st.caption(
+                            f"**{s['name']}**  \n"
+                            f"{s.get('address', '')}  \n"
+                            f"📏 {s['_dist_km']} km"
+                        )
+                elif not coords:
+                    st.warning("Fant ikke postnummeret — sjekk at det er 4 siffer.")
+                else:
+                    st.info("Ingen butikker funnet.")
         st.divider()
 
     _wl_triggered = sum(1 for w in db.get_watchlist(_user_db_id) if w["status"] == "triggered")
