@@ -148,6 +148,7 @@ _DEFAULTS: dict = {
     "kassal_results": {},
     "product_detail": None,  # {name, variant, store, price}
     "join_feedback": None,   # melding etter ?join=<token>
+    "auto_search": False,
 }
 
 # Håndter ?join=<token> — automatisk innmelding i delt liste
@@ -432,6 +433,91 @@ def _show_varslingsliste() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Produkt-handlinger: 🔔 📋 👁️ 🔍  (brukes i kortvisning og detaljvisning)
+# ---------------------------------------------------------------------------
+
+def _produkt_handlinger(
+    name: str,
+    price: float,
+    url: str | None,
+    variant: str | None,
+    key_suffix: str,
+    wl_names: set | None = None,
+    already_added: set | None = None,
+    is_obs: bool = False,
+) -> None:
+    wl_name = f"{name} {variant}".strip() if variant else name
+    if wl_names is None:
+        wl_names = {w["original_name"].lower() for w in db.get_watchlist(_user_db_id)}
+    if already_added is None:
+        already_added = _all_item_names()
+    on_wl = wl_name.lower() in wl_names or name.lower() in wl_names
+    on_list = name.lower() in already_added
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    # 🔔 Varsling
+    if not is_obs:
+        with c1.popover("🔔" if on_wl else "🔕", help="Varsling"):
+            if on_wl:
+                st.caption(f"**{wl_name.capitalize()}** er på varslingslisten.")
+                if st.button("Fjern varsel", key=f"bell_rm_{key_suffix}"):
+                    db.remove_from_watchlist(_user_db_id, wl_name)
+                    st.rerun()
+            else:
+                st.markdown(f"**Varsle meg om {name.capitalize()} når...**")
+                opts = [
+                    "Prisen er på tilbud (anbefalt)",
+                    f"Prisen er under X kr  (nå: {price:.0f} kr)",
+                    "Prisen er mer enn X% billigere enn snitt",
+                ]
+                choice = st.radio("Terskel", opts, key=f"bell_type_{key_suffix}", label_visibility="collapsed")
+                tval = None
+                if "under X kr" in choice:
+                    tval = st.number_input("Grensepris (kr)", min_value=0.1, value=round(price * 0.9, 1), key=f"bell_val_{key_suffix}")
+                elif "X%" in choice:
+                    tval = st.number_input("Prosent lavere", min_value=1, max_value=80, value=10, key=f"bell_pct_{key_suffix}")
+                ttype = "sale" if "tilbud" in choice else ("absolute" if "under X" in choice else "relative")
+                if st.button("Lagre varsel", key=f"bell_save_{key_suffix}", type="primary"):
+                    db.add_to_watchlist(_user_db_id, wl_name, ttype, tval)
+                    st.success("✓ Varsel lagret")
+
+    # 📋 Handleliste
+    list_icon = "✅" if on_list else "📋"
+    with c2.popover(list_icon, help="Handleliste"):
+        if on_list:
+            st.caption(f"**{name.capitalize()}** er allerede på handlelisten.")
+        else:
+            lists = _user_lists()
+            if not lists:
+                st.info("Ingen lister ennå.")
+                nl = st.text_input("Opprett ny liste", value="Handleliste", key=f"li_nl_{key_suffix}")
+                if st.button("Opprett og legg til", key=f"li_cnl_{key_suffix}", type="primary"):
+                    lid = db.create_shopping_list(_user_db_id, nl.strip() or "Handleliste")
+                    db.add_to_shopping_list(lid, name)
+                    st.rerun()
+            else:
+                chosen = st.selectbox("Velg liste", [l["name"] for l in lists], key=f"li_sel_{key_suffix}")
+                qty = st.number_input("Antall", min_value=1, value=1, key=f"li_qty_{key_suffix}")
+                if st.button("Legg til", key=f"li_add_{key_suffix}", type="primary"):
+                    lid = next(l["id"] for l in lists if l["name"] == chosen)
+                    db.add_to_shopping_list(lid, name, quantity=int(qty))
+                    st.success(f"✓ Lagt til i {chosen}")
+
+    # 👁️ Vis i butikk
+    if url and not is_obs:
+        c3.link_button("👁️", url, help="Vis i butikk")
+
+    # 🔍 Søk på dette produktet
+    if c4.button("🔍", key=f"resok_{key_suffix}", help="Søk på dette produktet"):
+        st.session_state.last_query = name
+        st.session_state.search_results = None
+        st.session_state.auto_search = True
+        st.session_state.section = "søk"
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # "Legg i liste"-popover (brukes i søkeresultater)
 # ---------------------------------------------------------------------------
 
@@ -591,12 +677,8 @@ def _show_product_detail() -> None:
     # Handlinger
     st.divider()
     wl_name = display_name if variant else name
-    act1, act2 = st.columns(2)
     ref_price = same_vol[0]["Pris (kr)"] if same_vol else (other_vol[0]["Pris (kr)"] if other_vol else pd_info.get("price", 0.0))
-    with act1:
-        _legg_til_popover(name, f"det_{name[:12]}")
-    with act2:
-        _varsle_meg_popover(wl_name, ref_price, f"det_{name[:12]}")
+    _produkt_handlinger(name, ref_price, None, variant, f"det_{name[:12]}")
 
     # Prishistorikk
     st.divider()
@@ -635,11 +717,21 @@ def _show_search() -> None:
     with st.form("search_form"):
         col1, col2 = st.columns([6, 1])
         with col1:
-            query = st.text_input("Søk etter produkt", placeholder="f.eks. havregryn, smør, egg...")
+            query = st.text_input(
+                "Søk etter produkt",
+                value=st.session_state.last_query,
+                placeholder="f.eks. havregryn, smør, egg...",
+            )
         with col2:
             st.write("")
             submitted = st.form_submit_button("Søk", type="primary", use_container_width=True)
         limit = 5
+
+    # Auto-søk utløst fra 🔍-knapp på produktkort
+    if not submitted and st.session_state.get("auto_search") and st.session_state.last_query:
+        submitted = True
+        query = st.session_state.last_query
+        st.session_state.auto_search = False
 
     if st.session_state.bulk_add_feedback:
         fb = st.session_state.bulk_add_feedback
@@ -754,13 +846,19 @@ def _show_search() -> None:
         if len(selected_rows) == 1:
             row_sel = df.iloc[selected_rows[0]]
             if row_sel.get("Butikk") != "OBS 📰" and row_sel.get("Produkt"):
-                if st.button("🔍 Vis detaljer →", type="secondary", key="btn_detail"):
+                ta1, ta2 = st.columns([2, 2])
+                if ta1.button("🔍 Vis detaljer →", type="secondary", key="btn_detail"):
                     st.session_state.product_detail = {
                         "name": row_sel["Produkt"],
                         "variant": row_sel.get("Mengde") or "",
                         "store": row_sel.get("Butikk") or "",
                         "price": row_sel.get("Pris (kr)") or 0.0,
                     }
+                    st.rerun()
+                if ta2.button("🔍 Nytt søk", type="secondary", key="btn_resok"):
+                    st.session_state.last_query = row_sel["Produkt"]
+                    st.session_state.auto_search = True
+                    st.session_state.search_results = None
                     st.rerun()
         if selected_rows:
             lists = _user_lists()
@@ -867,12 +965,14 @@ def _show_search() -> None:
                         if url:
                             st.markdown(f"[Se produkt]({url})")
 
-                        if name and name.lower() in already_added:
-                            st.caption("✓ På handlelisten")
-                        elif name:
-                            _legg_til_popover(name, f"{store}_{i}")
-                        if name and not is_obs:
-                            _varsle_meg_popover(wl_name, price or 0.0, f"{store}_{i}")
+                        if name:
+                            _produkt_handlinger(
+                                name, price or 0.0, url, variant,
+                                f"{store}_{i}",
+                                wl_names=_wl_names,
+                                already_added=already_added,
+                                is_obs=is_obs,
+                            )
 
     # Kassal-resultater er integrert i tabellen og per-butikk-kolonner ovenfor
     st.divider()
