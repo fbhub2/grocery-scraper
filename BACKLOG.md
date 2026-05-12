@@ -82,7 +82,7 @@ Prioritert liste. Øverst = viktigst.
 - [x] Støtter linjeskift, komma og semikolon som skilletegn
 - [x] Kan legge til i aktiv liste eller opprette ny liste
 
-### `feature/produkt-ikoner` — neste sprint
+### `feature/produkt-ikoner` ✅ klar for merge — mai 2026
 **Mål:** Alle produkter (tabell og kortvisning) får fire handlingsikoner:
 
 | Ikon | Funksjon | Merknad |
@@ -97,7 +97,7 @@ Prioritert liste. Øverst = viktigst.
 - Ny hjelpefunksjon `_produkt_ikoner(name, price, url, key_suffix)` brukes på tvers av alle visningstyper
 - ISSUE-07 kan delvis løses her ved å bruke EAN som nøkkel for handleliste-tillegg
 
-### `feature/kassal-inline` — neste sprint
+### `feature/kassal-inline` ✅ klar for merge — mai 2026
 **Mål:** Kassal-resultater vises på lik linje med Oda og Meny overalt.
 
 **Endringer:**
@@ -106,15 +106,10 @@ Prioritert liste. Øverst = viktigst.
 - Kassal søkes parallelt med Oda/Meny i `run_search()` (ikke separat `run_kassal_search()`) når toggle er på
 - Brukerinnstilling kontrollerer om Kassal inkluderes i prissammenlignings-tabellen
 
-### `feature/nearest-store` — backlog
-**Mål:** Vis hvilken Kassal-butikk som er nærmest brukeren.
-
-**Forutsetninger som må avklares:**
-- Kassal API: sjekk om `/stores` eller `/products`-endepunkt returnerer butikkens GPS-koordinater eller adresse
-- Geolokasjon: Streamlit støtter ikke browser geolocation nativt — alternativ: postnummer-input fra bruker
-- Mulig tilnærming: bruker taster postnummer → lookup mot postnummer→koordinat-tabell → beregn avstand til Kassal-butikker
-
-**Avhenger av:** `feature/kassal-inline`
+### `feature/nearest-store` ✅ klar for merge — mai 2026
+- [x] `scrapers/kassal_stores.py`: henter fysiske butikker, GeoNorge postnummer→koordinater, haversine-avstand
+- [x] Sidebar: postnummer-input lagret per bruker
+- [x] Sidebar-ekspander "Nærmeste butikker": 8 nærmeste med navn, adresse, km
 
 ---
 
