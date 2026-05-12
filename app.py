@@ -708,7 +708,7 @@ def _show_search() -> None:
     ] + [
         {
             "⭐": _on_wl(kp, kstore),
-            "Butikk": f"🏪 {kstore}",
+            "Butikk": kstore,
             "Produkt": kp.get("name"),
             "Mengde": kp.get("variant") or "",
             "Pris (kr)": kp["price"],
@@ -813,11 +813,20 @@ def _show_search() -> None:
 
     # --- Per-butikk kolonner ---
     _STORE_COLORS = {"Oda": "#005b96", "Meny": "#c0021b", "OBS 📰": "#d97706"}
+    _KASSAL_CHAINS = {
+        "MENY": "#c0021b", "Rema 1000": "#e63329", "Rema": "#e63329",
+        "Kiwi": "#00843d", "Coop Extra": "#004f9e", "Coop Obs": "#004f9e",
+        "Spar": "#e5231b", "Bunnpris": "#003087",
+    }
     # Bygg samlet butikk-struktur: online scrapers + Kassal (uten duplikater)
     all_store_data: dict[str, list] = {s: p for s, p in results.items()}
     for ks, kp in kassal_res.items():
         if ks not in ONLINE_STORES:
-            all_store_data[f"🏪 {ks}"] = kp
+            all_store_data[ks] = kp
+            # Sett farge for kjente kjeder
+            for chain, color in _KASSAL_CHAINS.items():
+                if chain.lower() in ks.lower() and ks not in _STORE_COLORS:
+                    _STORE_COLORS[ks] = color
 
     stores_to_show = list(all_store_data.keys())
     cols = st.columns(max(len(stores_to_show), 1))
@@ -884,9 +893,13 @@ def _show_search() -> None:
 # ---------------------------------------------------------------------------
 
 def _search_list_prices(items: list[dict]) -> None:
+    vis_fysiske = db.get_user_setting(_user_db_id, "vis_fysiske_butikker", "0") == "1"
+    use_kassal = vis_fysiske and kassal_configured()
+    active_stores = list(STORES.keys()) + (["Kassal"] if use_kassal else [])
+
     rows = []
-    totals = {s: 0.0 for s in STORES}
-    mangler: dict[str, list[str]] = {s: [] for s in STORES}
+    totals = {s: 0.0 for s in active_stores}
+    mangler: dict[str, list[str]] = {s: [] for s in active_stores}
     trends: dict[str, dict[str, dict]] = {}
 
     with st.spinner("Søker priser for alle varer ..."):
@@ -929,10 +942,27 @@ def _search_list_prices(items: list[dict]) -> None:
                     row[store_name] = None
                     row[f"{store_name} (enhet)"] = ""
                     mangler[store_name].append(vare)
+
+            # Kassal: billigste pris på tvers av alle fysiske butikker
+            if use_kassal:
+                kassal_prods = kassal_search(search_query, limit=8)
+                if kassal_prods:
+                    best_k = min(kassal_prods, key=lambda p: p.price)
+                    row["Kassal"] = best_k.price
+                    row["Kassal (enhet)"] = best_k.unit_price or ""
+                    row["Kassal (variant)"] = best_k.variant or ""
+                    row["Kassal (produkt)"] = f"{best_k.name} · {best_k.store_name}"
+                    totals["Kassal"] += best_k.price * qty
+                else:
+                    row["Kassal"] = None
+                    row["Kassal (enhet)"] = ""
+                    mangler["Kassal"].append(vare)
+
             rows.append(row)
 
     st.session_state.liste_resultater = {
-        "rows": rows, "totals": totals, "mangler": mangler, "trends": trends
+        "rows": rows, "totals": totals, "mangler": mangler, "trends": trends,
+        "stores": active_stores,
     }
 
 
@@ -940,6 +970,7 @@ def _show_liste_resultater() -> None:
     lr = st.session_state.liste_resultater
     rows, totals = lr["rows"], lr["totals"]
     mangler, trends = lr["mangler"], lr.get("trends", {})
+    active_stores = lr.get("stores", list(STORES.keys()))
 
     for vare, store_trends in trends.items():
         for store_name, t in store_trends.items():
@@ -951,11 +982,11 @@ def _show_liste_resultater() -> None:
     st.subheader("Prissammenligning")
 
     optimal_total = 0.0
-    store_best_sums = {s: 0.0 for s in STORES}
+    store_best_sums = {s: 0.0 for s in active_stores}
     rows_display = []
     for row in rows:
         qty = row.get("Antall", 1)
-        prices = {s: row[s] for s in STORES if row.get(s) is not None}
+        prices = {s: row[s] for s in active_stores if row.get(s) is not None}
         if prices:
             best = min(prices, key=prices.get)
             store_best_sums[best] += prices[best] * qty
@@ -964,7 +995,7 @@ def _show_liste_resultater() -> None:
             best = "—"
         product_name = row.get("_navn", row["Vare"])
         display_row = {k: v for k, v in row.items() if k != "_navn"}
-        for s in STORES:
+        for s in active_stores:
             variant = row.get(f"{s} (variant)") or None
             trend = db.get_price_trend(product_name, s, volume=variant)
             if trend and abs(trend["delta"]) > 0.01:
@@ -977,7 +1008,7 @@ def _show_liste_resultater() -> None:
         rows_display.append({**display_row, "Billigst": best})
 
     col_config: dict = {}
-    for s in STORES:
+    for s in active_stores:
         col_config[s] = st.column_config.NumberColumn(s, format="%.2f kr")
         col_config[f"{s} (enhet)"] = st.column_config.TextColumn(f"{s}/enhet", width="small")
         col_config[f"{s} (variant)"] = None
@@ -990,21 +1021,21 @@ def _show_liste_resultater() -> None:
     )
 
     st.subheader("Oppsummering")
-    m_cols = st.columns(1 + len(STORES))
+    m_cols = st.columns(1 + len(active_stores))
     m_cols[0].metric(
         "🏆 Optimal sum", f"kr {optimal_total:.2f}",
         help="Billigste alternativ per vare på tvers av butikker"
     )
-    for i, store in enumerate(STORES, 1):
-        delta = totals[store] - optimal_total
+    for i, store in enumerate(active_stores, 1):
+        delta = totals.get(store, 0) - optimal_total
         missing = mangler.get(store, [])
         m_cols[i].metric(
             store,
-            f"kr {store_best_sums[store]:.2f}",
+            f"kr {store_best_sums.get(store, 0):.2f}",
             delta=(
-                f"Alt på {store}: kr {totals[store]:.2f} (+kr {delta:.2f})"
+                f"Alt på {store}: kr {totals.get(store, 0):.2f} (+kr {delta:.2f})"
                 if delta > 0.01
-                else f"Alt på {store}: kr {totals[store]:.2f}"
+                else f"Alt på {store}: kr {totals.get(store, 0):.2f}"
             ),
             delta_color="off",
         )
@@ -1017,11 +1048,12 @@ def _show_liste_resultater() -> None:
             st.warning(f"{store}: ingen treff for: {', '.join(missing)}")
 
     # --- Optimal handleplan ---
+    _PLAN_COLORS = {"Oda": "#005b96", "Meny": "#c0021b", "Kassal": "#2d6a2d"}
     st.subheader("🗺️ Optimal handleplan")
     st.caption("Hvilke varer du bør kjøpe hvor for å minimere totalkostnad.")
     plan: dict[str, list[str]] = {}
     for row in rows:
-        prices = {s: row[s] for s in STORES if row.get(s) is not None}
+        prices = {s: row[s] for s in active_stores if row.get(s) is not None}
         if not prices:
             continue
         cheapest_store = min(prices, key=prices.get)
@@ -1039,7 +1071,7 @@ def _show_liste_resultater() -> None:
         for col, (store, items) in zip(plan_cols, plan.items()):
             with col:
                 with st.container(border=True):
-                    color = {"Oda": "#005b96", "Meny": "#c0021b"}.get(store, "#444")
+                    color = _PLAN_COLORS.get(store, "#444")
                     st.markdown(
                         f'<b style="color:{color}">{store}</b>', unsafe_allow_html=True
                     )
