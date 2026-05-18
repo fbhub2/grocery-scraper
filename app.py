@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import sys
 from pathlib import Path
@@ -23,6 +24,16 @@ _user = auth.require_login()
 _user_db_id = db.ensure_user(_user["sub"], _user["email"], _user["name"])
 _ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 _is_admin = bool(_ADMIN_EMAIL) and _user.get("email") == _ADMIN_EMAIL
+
+# Lagre GPS-koordinater fra nettleser-geolocation (sendes via URL-param)
+if "geo_lat" in st.query_params and "geo_lon" in st.query_params:
+    try:
+        db.set_user_setting(_user_db_id, "user_lat", st.query_params["geo_lat"])
+        db.set_user_setting(_user_db_id, "user_lon", st.query_params["geo_lon"])
+        db.set_user_setting(_user_db_id, "postnummer", "")
+    except Exception:
+        pass
+    st.query_params.clear()
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
 ONLINE_STORES = {"Oda", "Meny"}
@@ -1660,40 +1671,69 @@ with st.sidebar:
             st.session_state.kassal_results = {}
             st.rerun()
 
-        # --- Nærmeste butikker ---
-        _saved_pnr = db.get_user_setting(_user_db_id, "postnummer", "")
-        _pnr_input = st.text_input(
-            "📍 Ditt postnummer",
-            value=_saved_pnr,
-            max_chars=4,
-            placeholder="f.eks. 0179",
-            key="pnr_input",
-            help="Brukes til å vise nærmeste fysiske butikker",
-        )
-        if _pnr_input.strip() != _saved_pnr:
-            db.set_user_setting(_user_db_id, "postnummer", _pnr_input.strip())
-            st.session_state.kassal_stores_cache = None
-            st.rerun()
+        if _vis_fysiske:
+            _saved_pnr = db.get_user_setting(_user_db_id, "postnummer", "")
+            _saved_lat = db.get_user_setting(_user_db_id, "user_lat", "")
+            _saved_lon = db.get_user_setting(_user_db_id, "user_lon", "")
 
-        if _pnr_input.strip():
-            with st.expander("📍 Nærmeste butikker"):
-                if st.session_state.kassal_stores_cache is None:
-                    with st.spinner("Henter butikker..."):
-                        st.session_state.kassal_stores_cache = fetch_physical_stores()
-                all_phys = st.session_state.kassal_stores_cache or []
-                coords = postnummer_to_coords(_pnr_input.strip())
-                if coords and all_phys:
-                    near = nearest_stores(coords[0], coords[1], all_phys, limit=8)
-                    for s in near:
-                        st.caption(
-                            f"**{s['name']}**  \n"
-                            f"{s.get('address', '')}  \n"
-                            f"📏 {s['_dist_km']} km"
-                        )
-                elif not coords:
-                    st.warning("Fant ikke postnummeret — sjekk at det er 4 siffer.")
-                else:
-                    st.info("Ingen butikker funnet.")
+            if _saved_lat and _saved_lon:
+                _user_coords = (float(_saved_lat), float(_saved_lon))
+                st.caption("📡 GPS-posisjon aktiv")
+                if st.button("✕ Fjern GPS-posisjon", key="btn_clear_gps", use_container_width=True):
+                    db.set_user_setting(_user_db_id, "user_lat", "")
+                    db.set_user_setting(_user_db_id, "user_lon", "")
+                    st.session_state.kassal_stores_cache = None
+                    st.rerun()
+            else:
+                _user_coords = None
+                _pnr_input = st.text_input(
+                    "📍 Postnummer",
+                    value=_saved_pnr,
+                    max_chars=4,
+                    placeholder="f.eks. 0179",
+                    key="pnr_input",
+                    help="Brukes til å vise nærmeste fysiske butikker",
+                )
+                if _pnr_input.strip() != _saved_pnr:
+                    db.set_user_setting(_user_db_id, "postnummer", _pnr_input.strip())
+                    st.session_state.kassal_stores_cache = None
+                    st.rerun()
+                if _saved_pnr:
+                    _user_coords = postnummer_to_coords(_saved_pnr)
+                    if not _user_coords:
+                        st.warning("Fant ikke postnummeret — sjekk at det er 4 siffer.")
+
+                _geo_btn = (
+                    '<button onclick="navigator.geolocation.getCurrentPosition(function(p){'
+                    "var u=new URL(window.parent.location.href);"
+                    "u.searchParams.set('geo_lat',p.coords.latitude.toFixed(6));"
+                    "u.searchParams.set('geo_lon',p.coords.longitude.toFixed(6));"
+                    "window.parent.location.href=u.toString();"
+                    "},function(e){alert('Posisjon ikke tilgjengelig: '+e.message);})"
+                    ' style="width:100%;padding:6px 0;margin-top:4px;background:#0068c9;color:#fff;'
+                    'border:none;border-radius:4px;cursor:pointer;font-size:0.85rem;">'
+                    "📡 Del posisjon (GPS)"
+                    "</button>"
+                )
+                components.html(_geo_btn, height=38)
+
+            if _user_coords:
+                with st.expander("📍 Nærmeste butikker"):
+                    if st.session_state.kassal_stores_cache is None:
+                        with st.spinner("Henter butikker..."):
+                            st.session_state.kassal_stores_cache = fetch_physical_stores()
+                    all_phys = st.session_state.kassal_stores_cache or []
+                    if all_phys:
+                        near = nearest_stores(_user_coords[0], _user_coords[1], all_phys, limit=8)
+                        for s in near:
+                            st.caption(
+                                f"**{s['name']}**  \n"
+                                f"{s.get('address', '')}  \n"
+                                f"📏 {s['_dist_km']} km"
+                            )
+                    else:
+                        st.info("Ingen butikker funnet.")
+
         st.divider()
 
     _wl_triggered = sum(1 for w in db.get_watchlist(_user_db_id) if w["status"] == "triggered")
