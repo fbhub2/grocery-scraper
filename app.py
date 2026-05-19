@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import sys
+import html as _html_lib
 from pathlib import Path
+from urllib.parse import quote as _url_quote
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -23,6 +25,42 @@ _user = auth.require_login()
 _user_db_id = db.ensure_user(_user["sub"], _user["email"], _user["name"])
 _ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 _is_admin = bool(_ADMIN_EMAIL) and _user.get("email") == _ADMIN_EMAIL
+
+# Ikonhandlinger fra HTML-kortvisning (WL/liste-toggle via URL-params)
+if "card_action" in st.query_params:
+    _ca = st.query_params.get("card_action", "")
+    _cn = st.query_params.get("card_name", "")
+    _cv = st.query_params.get("card_var", "")
+    _cq = st.query_params.get("card_q", "")
+    if _ca == "wl" and _cn:
+        _wl_n = f"{_cn} {_cv}".strip() if _cv else _cn
+        _existing_wl = {w["original_name"].lower() for w in db.get_watchlist(_user_db_id)}
+        if _wl_n.lower() in _existing_wl or _cn.lower() in _existing_wl:
+            db.remove_from_watchlist(_user_db_id, _wl_n)
+        else:
+            db.add_to_watchlist(_user_db_id, _wl_n, "sale", None)
+    elif _ca == "li" and _cn:
+        _all_lists = db.get_shopping_lists(_user_db_id)
+        _on_any = any(
+            item["original_name"].lower() == _cn.lower()
+            for lst in _all_lists
+            for item in db.get_shopping_list_items(lst["id"])
+        )
+        if _on_any:
+            for lst in _all_lists:
+                for item in db.get_shopping_list_items(lst["id"]):
+                    if item["original_name"].lower() == _cn.lower():
+                        db.remove_shopping_list_item(item["id"])
+        elif _all_lists:
+            db.add_to_shopping_list(_all_lists[0]["id"], _cn)
+        else:
+            _new_lid = db.create_shopping_list(_user_db_id, "Handleliste")
+            db.add_to_shopping_list(_new_lid, _cn)
+    if _cq:
+        st.session_state.last_query = _cq
+        st.session_state.auto_search = True
+        st.session_state.search_results = None
+    st.query_params.clear()
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
 ONLINE_STORES = {"Oda", "Meny"}
@@ -118,6 +156,96 @@ def _market_badge(price: float, all_prices: list[float]) -> str | None:
     if pct > 10:
         return f"🔴 {pct:.0f}% over snitt"
     return None
+
+
+def _card_html(
+    name: str,
+    variant: str | None,
+    price: float | None,
+    unit_price: str | None,
+    image_url: str | None,
+    url: str | None,
+    market_badge: str | None,
+    on_wl: bool,
+    on_list: bool,
+    store: str,
+    store_color: str,
+    query: str = "",
+    obs_status: str | None = None,
+) -> str:
+    ne = _html_lib.escape(name or "")
+    ve = _html_lib.escape(variant or "")
+    ie = _html_lib.escape(image_url or "")
+    ue = _html_lib.escape(url or "")
+    nq = _url_quote(name or "")
+    vq = _url_quote(variant or "")
+    qq = _url_quote(query or "")
+    wl_href = f"?card_action=wl&card_name={nq}&card_var={vq}&card_q={qq}"
+    li_href = f"?card_action=li&card_name={nq}&card_q={qq}"
+
+    wl_color = "#ef4444" if on_wl else "#c4c4c4"
+    wl_icon = "♥" if on_wl else "♡"
+    li_color = "#22c55e" if on_list else "#c4c4c4"
+    li_icon = "✓" if on_list else "+"
+
+    ibtn = (
+        "display:inline-flex;align-items:center;justify-content:center;"
+        "width:32px;height:32px;border-radius:50%;"
+        "background:rgba(255,255,255,0.96);"
+        "box-shadow:0 1px 5px rgba(0,0,0,0.18);"
+        "text-decoration:none;line-height:1;"
+    )
+
+    if image_url and isinstance(image_url, str):
+        img = f'<img src="{ie}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;" loading="lazy">'
+    else:
+        img = '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#d1d5db;font-size:3rem;">🛒</div>'
+
+    price_s = (
+        f'<span style="font-size:1.3rem;font-weight:700;color:#111827;">kr {price:.2f}</span>'
+        if price is not None
+        else '<span style="font-size:12px;color:#9ca3af;font-style:italic;">Ingen prisdata</span>'
+    )
+    up_s = f' <span style="font-size:11px;color:#3b82f6;font-weight:500;">{_html_lib.escape(unit_price)}</span>' if unit_price else ""
+
+    badge_s = ""
+    if market_badge:
+        bc = "#16a34a" if "under" in market_badge else "#dc2626"
+        badge_s = f'<div style="font-size:11px;color:{bc};margin-top:3px;">{_html_lib.escape(market_badge)}</div>'
+    if obs_status:
+        badge_s += f'<div style="font-size:11px;color:#6b7280;margin-top:3px;">{_html_lib.escape(obs_status)}</div>'
+
+    view_s = f'<a href="{ue}" target="_blank" style="font-size:11px;color:#9ca3af;text-decoration:none;">Vis i butikk ↗</a>' if url else ""
+
+    store_pill = (
+        f'<span style="position:absolute;bottom:8px;left:8px;background:{store_color};'
+        f'color:white;font-size:9px;font-weight:700;padding:2px 7px;border-radius:9999px;'
+        f'letter-spacing:0.04em;opacity:0.88;">{_html_lib.escape(store)}</span>'
+    )
+
+    return (
+        '<div style="background:white;border-radius:12px;'
+        'box-shadow:0 2px 10px rgba(0,0,0,0.08);overflow:hidden;margin-bottom:10px;'
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">"
+
+        '<div style="position:relative;width:100%;padding-top:100%;background:#f8f9fa;">'
+        + img
+        + '<div style="position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px;z-index:2;">'
+        + f'<a href="{wl_href}" style="{ibtn}font-size:17px;color:{wl_color};" title="{"Fjern varsel" if on_wl else "Varsle meg"}">{wl_icon}</a>'
+        + f'<a href="{li_href}" style="{ibtn}font-size:20px;color:{li_color};font-weight:600;" title="{"Fjern fra liste" if on_list else "Legg i liste"}">{li_icon}</a>'
+        + "</div>"
+        + store_pill
+        + "</div>"
+
+        + '<div style="padding:10px 12px 12px;">'
+        + f'<div style="font-size:13px;font-weight:600;color:#111827;line-height:1.35;margin-bottom:2px;">{ne}</div>'
+        + f'<div style="font-size:11px;color:#9ca3af;margin-bottom:7px;">{ve}</div>'
+        + f'<div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;">{price_s}{up_s}</div>'
+        + badge_s
+        + (f'<div style="margin-top:7px;">{view_s}</div>' if view_s else "")
+        + "</div>"
+        + "</div>"
+    )
 
 
 def _user_lists() -> list[dict]:
@@ -911,6 +1039,19 @@ def _show_search() -> None:
         for p in prods if isinstance(p, dict) and p.get("price") is not None
     ]
 
+    # Fase 1 — global CSS-reset: shadow-kort, rene kolonner
+    st.markdown("""<style>
+[data-testid="stVerticalBlockBorderWrapper"] {
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07) !important;
+  transition: box-shadow .18s ease !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+  box-shadow: 0 4px 18px rgba(0,0,0,0.12) !important;
+}
+</style>""", unsafe_allow_html=True)
+
     # --- Per-butikk kolonner ---
     _STORE_COLORS = {"Oda": "#005b96", "Meny": "#c0021b", "OBS 📰": "#d97706"}
     _KASSAL_CHAINS = {
@@ -953,37 +1094,20 @@ def _show_search() -> None:
                     image_url = p.get("image_url")
                     wl_name = f"{name} {variant}".strip() if variant else name
 
-                    with st.container(border=True):
-                        if image_url and isinstance(image_url, str):
-                            st.image(image_url, width=72)
-                        st.markdown(f"**{name}**")
-                        if variant:
-                            st.caption(variant)
-                        st.markdown(f"### kr {price:.2f}")
-                        if unit_price:
-                            st.badge(unit_price, color="blue")
-                        if price is not None and not is_obs:
-                            badge = _market_badge(price, _all_search_prices)
-                            if badge:
-                                st.caption(badge)
-
+                    if name:
+                        on_wl = wl_name.lower() in _wl_names or name.lower() in _wl_names
+                        on_list = name.lower() in already_added
+                        mbadge = _market_badge(price, _all_search_prices) if price is not None and not is_obs else None
+                        obs_st = None
                         if is_obs and valid_to:
                             from datetime import date as _date
-                            if valid_to < _date.today().isoformat():
-                                st.caption("⏰ Utløpt")
-                            else:
-                                st.caption(f"✅ Gyldig til {valid_to}")
-                        if url:
-                            st.markdown(f"[Se produkt]({url})")
-
-                        if name:
-                            _produkt_handlinger(
-                                name, price or 0.0, url, variant,
-                                f"{store}_{i}",
-                                wl_names=_wl_names,
-                                already_added=already_added,
-                                is_obs=is_obs,
-                            )
+                            obs_st = "⏰ Utløpt" if valid_to < _date.today().isoformat() else f"✅ Gyldig til {valid_to}"
+                        st.markdown(
+                            _card_html(name, variant, price, unit_price, image_url, url,
+                                       mbadge, on_wl, on_list, store, color,
+                                       st.session_state.get("last_query", ""), obs_st),
+                            unsafe_allow_html=True,
+                        )
 
     # Kassal-resultater er integrert i tabellen og per-butikk-kolonner ovenfor
     st.divider()
