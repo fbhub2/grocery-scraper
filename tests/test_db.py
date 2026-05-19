@@ -255,3 +255,44 @@ class TestWatchlist:
         items = db.get_watchlist(uid)
         assert len(items) == 1
         assert items[0]["threshold_value"] == 18.0
+
+
+class TestUserSettings:
+    def test_standard_verdi_naar_ikke_satt(self, tmp_db):
+        uid = db.ensure_user("sub-1", "a@b.com", "Ola")
+        assert db.get_user_setting(uid, "postnummer", "default") == "default"
+
+    def test_set_og_get(self, tmp_db):
+        uid = db.ensure_user("sub-1", "a@b.com", "Ola")
+        db.set_user_setting(uid, "postnummer", "0179")
+        assert db.get_user_setting(uid, "postnummer") == "0179"
+
+    def test_oppdatering_overskriver(self, tmp_db):
+        uid = db.ensure_user("sub-1", "a@b.com", "Ola")
+        db.set_user_setting(uid, "postnummer", "0179")
+        db.set_user_setting(uid, "postnummer", "5003")
+        assert db.get_user_setting(uid, "postnummer") == "5003"
+
+    def test_isolert_per_bruker(self, tmp_db):
+        uid1 = db.ensure_user("sub-1", "a@b.com", "Ola")
+        uid2 = db.ensure_user("sub-2", "b@b.com", "Kari")
+        db.set_user_setting(uid1, "postnummer", "0179")
+        assert db.get_user_setting(uid2, "postnummer", "") == ""
+
+    def test_vis_fysiske_toggle(self, tmp_db):
+        uid = db.ensure_user("sub-1", "a@b.com", "Ola")
+        db.set_user_setting(uid, "vis_fysiske_butikker", "1")
+        assert db.get_user_setting(uid, "vis_fysiske_butikker", "0") == "1"
+
+    def test_gps_koordinater(self, tmp_db):
+        uid = db.ensure_user("sub-1", "a@b.com", "Ola")
+        db.set_user_setting(uid, "user_lat", "59.9139")
+        db.set_user_setting(uid, "user_lon", "10.7522")
+        assert db.get_user_setting(uid, "user_lat") == "59.9139"
+        assert db.get_user_setting(uid, "user_lon") == "10.7522"
+
+    def test_tom_streng_er_gyldig_verdi(self, tmp_db):
+        uid = db.ensure_user("sub-1", "a@b.com", "Ola")
+        db.set_user_setting(uid, "postnummer", "0179")
+        db.set_user_setting(uid, "postnummer", "")
+        assert db.get_user_setting(uid, "postnummer") == ""
