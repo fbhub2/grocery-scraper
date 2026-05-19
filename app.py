@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import sys
 import html as _html_lib
@@ -60,6 +61,17 @@ if "card_action" in st.query_params:
         st.session_state.last_query = _cq
         st.session_state.auto_search = True
         st.session_state.search_results = None
+    st.query_params.clear()
+
+# GPS-posisjon fra nettleser via JS
+if "geo_lat" in st.query_params and "geo_lon" in st.query_params:
+    try:
+        db.set_user_setting(_user_db_id, "user_lat", st.query_params["geo_lat"])
+        db.set_user_setting(_user_db_id, "user_lon", st.query_params["geo_lon"])
+        db.set_user_setting(_user_db_id, "postnummer", "")
+        st.session_state.kassal_stores_cache = None
+    except Exception:
+        pass
     st.query_params.clear()
 
 STORES = {"Oda": oda_search, "Meny": meny_search}
@@ -1784,40 +1796,68 @@ with st.sidebar:
             st.session_state.kassal_results = {}
             st.rerun()
 
-        # --- Nærmeste butikker ---
-        _saved_pnr = db.get_user_setting(_user_db_id, "postnummer", "")
-        _pnr_input = st.text_input(
-            "📍 Ditt postnummer",
-            value=_saved_pnr,
-            max_chars=4,
-            placeholder="f.eks. 0179",
-            key="pnr_input",
-            help="Brukes til å vise nærmeste fysiske butikker",
-        )
-        if _pnr_input.strip() != _saved_pnr:
-            db.set_user_setting(_user_db_id, "postnummer", _pnr_input.strip())
-            st.session_state.kassal_stores_cache = None
-            st.rerun()
+        if _vis_fysiske:
+            # --- Posisjon: GPS eller postnummer ---
+            _saved_lat = db.get_user_setting(_user_db_id, "user_lat", "")
+            _saved_lon = db.get_user_setting(_user_db_id, "user_lon", "")
+            _saved_pnr = db.get_user_setting(_user_db_id, "postnummer", "")
 
-        if _pnr_input.strip():
-            with st.expander("📍 Nærmeste butikker"):
-                if st.session_state.kassal_stores_cache is None:
-                    with st.spinner("Henter butikker..."):
-                        st.session_state.kassal_stores_cache = fetch_physical_stores()
-                all_phys = st.session_state.kassal_stores_cache or []
-                coords = postnummer_to_coords(_pnr_input.strip())
-                if coords and all_phys:
-                    near = nearest_stores(coords[0], coords[1], all_phys, limit=8)
-                    for s in near:
-                        st.caption(
-                            f"**{s['name']}**  \n"
-                            f"{s.get('address', '')}  \n"
-                            f"📏 {s['_dist_km']} km"
-                        )
-                elif not coords:
-                    st.warning("Fant ikke postnummeret — sjekk at det er 4 siffer.")
-                else:
-                    st.info("Ingen butikker funnet.")
+            if _saved_lat and _saved_lon:
+                st.caption("📡 GPS-posisjon aktiv")
+                if st.button("✕ Fjern GPS-posisjon", key="rm_gps"):
+                    db.set_user_setting(_user_db_id, "user_lat", "")
+                    db.set_user_setting(_user_db_id, "user_lon", "")
+                    st.session_state.kassal_stores_cache = None
+                    st.rerun()
+                _pnr_input = ""
+            else:
+                _pnr_input = st.text_input(
+                    "📍 Ditt postnummer",
+                    value=_saved_pnr,
+                    max_chars=4,
+                    placeholder="f.eks. 0179",
+                    key="pnr_input",
+                    help="Brukes til å vise nærmeste fysiske butikker",
+                )
+                if _pnr_input.strip() != _saved_pnr:
+                    db.set_user_setting(_user_db_id, "postnummer", _pnr_input.strip())
+                    st.session_state.kassal_stores_cache = None
+                    st.rerun()
+                _gps_js = """<button onclick="
+                    navigator.geolocation.getCurrentPosition(function(p){
+                        var url=window.parent.location.href.split('?')[0];
+                        window.parent.location.href=url+'?geo_lat='+p.coords.latitude+'&geo_lon='+p.coords.longitude;
+                    },function(){alert('Klarte ikke hente posisjon.');});
+                " style="width:100%;padding:6px 0;background:#fff;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:0.85rem;">
+                    📡 Bruk min posisjon (GPS)
+                </button>"""
+                components.html(_gps_js, height=38)
+
+            # --- Nærmeste butikker ---
+            _pos_pnr = _pnr_input.strip() if not (_saved_lat and _saved_lon) else ""
+            _has_pos = bool(_saved_lat and _saved_lon) or bool(_pos_pnr)
+            if _has_pos:
+                with st.expander("📍 Nærmeste butikker"):
+                    if st.session_state.kassal_stores_cache is None:
+                        with st.spinner("Henter butikker..."):
+                            st.session_state.kassal_stores_cache = fetch_physical_stores()
+                    all_phys = st.session_state.kassal_stores_cache or []
+                    if _saved_lat and _saved_lon:
+                        coords = (float(_saved_lat), float(_saved_lon))
+                    else:
+                        coords = postnummer_to_coords(_pos_pnr)
+                    if coords and all_phys:
+                        near = nearest_stores(coords[0], coords[1], all_phys, limit=8)
+                        for s in near:
+                            st.caption(
+                                f"**{s['name']}**  \n"
+                                f"{s.get('address', '')}  \n"
+                                f"📏 {s['_dist_km']} km"
+                            )
+                    elif not coords:
+                        st.warning("Fant ikke postnummeret — sjekk at det er 4 siffer.")
+                    else:
+                        st.info("Ingen butikker funnet.")
         st.divider()
 
     _wl_triggered = sum(1 for w in db.get_watchlist(_user_db_id) if w["status"] == "triggered")
