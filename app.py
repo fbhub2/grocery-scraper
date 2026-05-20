@@ -14,7 +14,7 @@ import sqlite3
 import db
 import auth
 from normalize import normalize_search_term, check_threshold
-from ui_helpers import _market_badge, _card_html
+from ui_helpers import _market_badge, _card_html, CARD_HEIGHT
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
@@ -23,6 +23,7 @@ st.set_page_config(page_title="Prissammenligning", page_icon="🛒", layout="wid
 
 _user = auth.require_login()
 _user_db_id = db.ensure_user(_user["sub"], _user["email"], _user["name"])
+_session_tok = st.query_params.get("s", "")
 _ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 _is_admin = bool(_ADMIN_EMAIL) and _user.get("email") == _ADMIN_EMAIL
 
@@ -1006,11 +1007,12 @@ def _show_search() -> None:
                         if is_obs and valid_to:
                             from datetime import date as _date
                             obs_st = "⏰ Utløpt" if valid_to < _date.today().isoformat() else f"✅ Gyldig til {valid_to}"
-                        st.markdown(
+                        components.html(
                             _card_html(name, variant, price, unit_price, image_url, url,
                                        mbadge, on_wl, on_list, store, color,
-                                       st.session_state.get("last_query", ""), obs_st),
-                            unsafe_allow_html=True,
+                                       st.session_state.get("last_query", ""), obs_st,
+                                       session_token=_session_tok),
+                            height=CARD_HEIGHT,
                         )
 
     # Kassal-resultater er integrert i tabellen og per-butikk-kolonner ovenfor

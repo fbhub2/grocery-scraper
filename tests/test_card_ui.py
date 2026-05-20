@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ui_helpers import _card_html, _market_badge
+from ui_helpers import _card_html, _market_badge, CARD_HEIGHT
 
 
 class TestMarketBadge:
@@ -53,6 +53,7 @@ class TestCardHtml:
             store="Oda",
             store_color="#e84142",
             query="melk",
+            session_token="testtoken",
         )
         return _card_html(**{**defaults, **overrides})
 
@@ -94,19 +95,37 @@ class TestCardHtml:
         assert "✓" in html
         assert "#22c55e" in html
 
-    def test_wl_href_inneholder_produktnavn(self):
+    def test_wl_js_inneholder_produktnavn(self):
         html = self._basic(name="Tine Lettmelk", query="melk")
         assert "card_action=wl" in html
         assert "Tine%20Lettmelk" in html
 
-    def test_liste_href_inneholder_produktnavn(self):
+    def test_liste_js_inneholder_produktnavn(self):
         html = self._basic(name="Tine Lettmelk", query="melk")
         assert "card_action=li" in html
         assert "Tine%20Lettmelk" in html
 
-    def test_query_inkludert_i_href(self):
+    def test_query_inkludert_i_nav(self):
         html = self._basic(query="lettmelk")
         assert "card_q=lettmelk" in html
+
+    def test_session_token_inkludert_i_nav(self):
+        html = self._basic(session_token="abc123")
+        assert "s=abc123" in html
+
+    def test_uten_session_token_fungerer(self):
+        html = self._basic(session_token="")
+        assert "card_action=wl" in html
+
+    def test_bruker_button_ikke_a_for_ikoner(self):
+        html = self._basic()
+        # Ikonene skal bruke <button onclick> ikke <a href> for å unngå ny fane
+        assert "onclick" in html
+        assert "window.parent.location.href" in html
+
+    def test_card_height_konstant_definert(self):
+        assert isinstance(CARD_HEIGHT, int)
+        assert CARD_HEIGHT >= 300
 
     def test_vis_i_butikk_lenke_vises(self):
         html = self._basic(url="https://oda.com/no/products/1/")
