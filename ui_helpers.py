@@ -1,8 +1,8 @@
 import html as _html_lib
 from urllib.parse import quote as _url_quote
 
-# Height of the iframe produced by components.html(_card_html(...))
-CARD_HEIGHT = 340
+# Used by app.py when calling components.html() for non-card purposes
+CARD_HEIGHT = 340  # kept for backwards compat, not used for cards
 
 
 def _market_badge(price: float, all_prices: list[float]) -> str | None:
@@ -47,38 +47,15 @@ def _card_html(
     qq = _url_quote(query or "")
     sq = _url_quote(session_token or "")
 
-    # Navigation URLs — session token preserved so auth survives the click
+    # Session token included so auth survives navigation
     s_prefix = f"?s={sq}&" if sq else "?"
-    wl_js = f"window.parent.location.href='{s_prefix}card_action=wl&card_name={nq}&card_var={vq}&card_q={qq}'"
-    li_js = f"window.parent.location.href='{s_prefix}card_action=li&card_name={nq}&card_q={qq}'"
+    wl_href = f"{s_prefix}card_action=wl&card_name={nq}&card_var={vq}&card_q={qq}"
+    li_href = f"{s_prefix}card_action=li&card_name={nq}&card_q={qq}"
 
-    wl_color = "#ef4444" if on_wl else "#c4c4c4"
-    wl_icon = "♥" if on_wl else "♡"
-    wl_title = "Fjern varsel" if on_wl else "Varsle meg"
-    li_color = "#22c55e" if on_list else "#c4c4c4"
-    li_icon = "✓" if on_list else "+"
-    li_title = "Fjern fra liste" if on_list else "Legg i liste"
-
-    ibtn = (
-        "display:inline-flex;align-items:center;justify-content:center;"
-        "width:32px;height:32px;border-radius:50%;"
-        "background:rgba(255,255,255,0.96);"
-        "box-shadow:0 1px 5px rgba(0,0,0,0.18);"
-        "text-decoration:none;line-height:1;cursor:pointer;border:none;"
-        "font-family:inherit;"
-    )
-
-    # Fixed image height so components.html() height is predictable
-    img_h = "200px"
     if image_url and isinstance(image_url, str):
-        img = (
-            f'<img src="{ie}" style="width:100%;height:{img_h};object-fit:contain;" loading="lazy">'
-        )
+        img = f'<img src="{ie}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;" loading="lazy">'
     else:
-        img = (
-            f'<div style="width:100%;height:{img_h};display:flex;align-items:center;'
-            f'justify-content:center;color:#d1d5db;font-size:3rem;">🛒</div>'
-        )
+        img = '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#d1d5db;font-size:3rem;">🛒</div>'
 
     price_s = (
         f'<span style="font-size:1.3rem;font-weight:700;color:#111827;">kr {price:.2f}</span>'
@@ -105,28 +82,21 @@ def _card_html(
     )
 
     store_pill = (
-        f'<span style="background:{store_color};color:white;font-size:9px;font-weight:700;'
-        f'padding:2px 7px;border-radius:9999px;letter-spacing:0.04em;opacity:0.88;'
-        f'position:absolute;bottom:8px;left:8px;">{_html_lib.escape(store)}</span>'
+        f'<span style="position:absolute;bottom:8px;left:8px;background:{store_color};'
+        f'color:white;font-size:9px;font-weight:700;padding:2px 7px;border-radius:9999px;'
+        f'letter-spacing:0.04em;opacity:0.88;">{_html_lib.escape(store)}</span>'
     )
 
     return (
-        '<html><body style="margin:0;padding:0;">'
         '<div style="background:white;border-radius:12px;'
-        'box-shadow:0 2px 10px rgba(0,0,0,0.08);overflow:hidden;'
+        'box-shadow:0 2px 10px rgba(0,0,0,0.08);overflow:hidden;margin-bottom:4px;'
         "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">"
 
-        # Image area with icon tray and store badge
-        '<div style="position:relative;background:#f8f9fa;">'
+        '<div style="position:relative;width:100%;padding-top:100%;background:#f8f9fa;">'
         + img
-        + '<div style="position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px;z-index:2;">'
-        + f'<button onclick="{wl_js}" style="{ibtn}font-size:17px;color:{wl_color};" title="{wl_title}">{wl_icon}</button>'
-        + f'<button onclick="{li_js}" style="{ibtn}font-size:20px;color:{li_color};font-weight:600;" title="{li_title}">{li_icon}</button>'
-        + "</div>"
         + store_pill
         + "</div>"
 
-        # Card body
         + '<div style="padding:10px 12px 12px;">'
         + f'<div style="font-size:13px;font-weight:600;color:#111827;line-height:1.35;margin-bottom:2px;">{ne}</div>'
         + f'<div style="font-size:11px;color:#9ca3af;margin-bottom:7px;">{ve}</div>'
@@ -135,5 +105,4 @@ def _card_html(
         + (f'<div style="margin-top:7px;">{view_s}</div>' if view_s else "")
         + "</div>"
         + "</div>"
-        + "</body></html>"
     )

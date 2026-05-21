@@ -76,52 +76,51 @@ class TestCardHtml:
         html = self._basic()
         assert "Oda" in html
 
-    def test_wl_ikon_av_naar_ikke_paa_liste(self):
+    def test_on_wl_false_aksepteres(self):
         html = self._basic(on_wl=False)
-        assert "♡" in html
-        assert "#c4c4c4" in html
+        assert isinstance(html, str)
 
-    def test_wl_ikon_pa_naar_paa_varslingsliste(self):
+    def test_on_wl_true_aksepteres(self):
         html = self._basic(on_wl=True)
-        assert "♥" in html
-        assert "#ef4444" in html
+        assert isinstance(html, str)
 
-    def test_liste_ikon_av_naar_ikke_paa_liste(self):
+    def test_on_list_false_aksepteres(self):
         html = self._basic(on_list=False)
-        assert "+" in html
+        assert isinstance(html, str)
 
-    def test_liste_ikon_pa_naar_paa_liste(self):
+    def test_on_list_true_aksepteres(self):
         html = self._basic(on_list=True)
-        assert "✓" in html
-        assert "#22c55e" in html
+        assert isinstance(html, str)
 
-    def test_wl_js_inneholder_produktnavn(self):
-        html = self._basic(name="Tine Lettmelk", query="melk")
-        assert "card_action=wl" in html
-        assert "Tine%20Lettmelk" in html
+    def test_ingen_card_action_lenker_i_html(self):
+        # Ikon-handlinger er native Streamlit-knapper, ikke HTML-lenker
+        html = self._basic()
+        assert "card_action=wl" not in html
+        assert "card_action=li" not in html
 
-    def test_liste_js_inneholder_produktnavn(self):
-        html = self._basic(name="Tine Lettmelk", query="melk")
-        assert "card_action=li" in html
-        assert "Tine%20Lettmelk" in html
-
-    def test_query_inkludert_i_nav(self):
-        html = self._basic(query="lettmelk")
-        assert "card_q=lettmelk" in html
-
-    def test_session_token_inkludert_i_nav(self):
+    def test_ingen_navigasjonslenker_i_html(self):
+        # Ingen href med session-token for korthandlinger
         html = self._basic(session_token="abc123")
-        assert "s=abc123" in html
+        assert "?s=abc123" not in html
+
+    def test_query_param_aksepteres(self):
+        html = self._basic(query="lettmelk")
+        assert isinstance(html, str)
+
+    def test_session_token_param_aksepteres(self):
+        html = self._basic(session_token="abc123")
+        assert isinstance(html, str)
 
     def test_uten_session_token_fungerer(self):
         html = self._basic(session_token="")
-        assert "card_action=wl" in html
+        assert isinstance(html, str)
+        assert "Tine Lettmelk" in html
 
-    def test_bruker_button_ikke_a_for_ikoner(self):
+    def test_card_har_ikke_inline_ikoner(self):
+        # Ikoner (♡ ♥ + ✓) er native Streamlit-knapper, ikke i card-HTML
         html = self._basic()
-        # Ikonene skal bruke <button onclick> ikke <a href> for å unngå ny fane
-        assert "onclick" in html
-        assert "window.parent.location.href" in html
+        assert "♡" not in html
+        assert "♥" not in html
 
     def test_card_height_konstant_definert(self):
         assert isinstance(CARD_HEIGHT, int)

@@ -14,7 +14,7 @@ import sqlite3
 import db
 import auth
 from normalize import normalize_search_term, check_threshold
-from ui_helpers import _market_badge, _card_html, CARD_HEIGHT
+from ui_helpers import _market_badge, _card_html
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
@@ -878,35 +878,55 @@ def _show_search() -> None:
         )
 
         selected_rows = selection.selection.rows if selection else []
-        if len(selected_rows) == 1:
-            row_sel = df.iloc[selected_rows[0]]
-            if row_sel.get("Butikk") != "OBS 📰" and row_sel.get("Produkt"):
-                ta1, ta2 = st.columns([2, 2])
-                if ta1.button("🔍 Vis detaljer →", type="secondary", key="btn_detail"):
-                    st.session_state.product_detail = {
-                        "name": row_sel["Produkt"],
-                        "variant": row_sel.get("Mengde") or "",
-                        "store": row_sel.get("Butikk") or "",
-                        "price": row_sel.get("Pris (kr)") or 0.0,
-                    }
-                    st.rerun()
-                if ta2.button("🔍 Nytt søk", type="secondary", key="btn_resok"):
-                    st.session_state.last_query = row_sel["Produkt"]
-                    st.session_state.auto_search = True
-                    st.session_state.search_results = None
-                    st.rerun()
         if selected_rows:
             lists = _user_lists()
-            ba1, ba2, ba3 = st.columns([2, 3, 2])
-            with ba2:
+            n_sel = len(selected_rows)
+            row_sel = df.iloc[selected_rows[0]] if n_sel == 1 else None
+            is_product_row = (
+                row_sel is not None
+                and row_sel.get("Butikk") != "OBS 📰"
+                and row_sel.get("Produkt")
+            )
+
+            # Single compact action bar
+            _ab = st.columns([2, 2, 3, 2])
+
+            # Left: Detaljer + Søk igjen (single-row only)
+            with _ab[0]:
+                if is_product_row:
+                    if st.button("🔍 Detaljer", type="secondary", key="btn_detail", use_container_width=True):
+                        st.session_state.product_detail = {
+                            "name": row_sel["Produkt"],
+                            "variant": row_sel.get("Mengde") or "",
+                            "store": row_sel.get("Butikk") or "",
+                            "price": row_sel.get("Pris (kr)") or 0.0,
+                        }
+                        st.rerun()
+            with _ab[1]:
+                if is_product_row:
+                    if st.button("↩ Søk igjen", type="secondary", key="btn_resok", use_container_width=True):
+                        st.session_state.last_query = row_sel["Produkt"]
+                        st.session_state.auto_search = True
+                        st.session_state.search_results = None
+                        st.rerun()
+
+            # Center: list picker + add button inline
+            with _ab[2]:
                 if lists:
                     target = st.selectbox(
-                        "Legg til i", [l["name"] for l in lists], key="bulk_list_target"
+                        "Liste", [l["name"] for l in lists],
+                        key="bulk_list_target", label_visibility="collapsed",
                     )
                 else:
-                    target = st.text_input("Ny liste", value="Handleliste", key="bulk_new_list")
-            with ba1:
-                if st.button(f"➕ Legg til valgte ({len(selected_rows)})", type="primary"):
+                    target = st.text_input(
+                        "Ny liste", value="Handleliste",
+                        key="bulk_new_list", label_visibility="collapsed",
+                    )
+
+            # Right: add + varsle
+            with _ab[3]:
+                _rb = st.columns(2)
+                if _rb[0].button(f"➕ {n_sel}", type="primary", help=f"Legg til {n_sel} valgte i liste", use_container_width=True):
                     if not lists:
                         lid = db.create_shopping_list(_user_db_id, target or "Handleliste")
                     else:
@@ -921,14 +941,12 @@ def _show_search() -> None:
                         "list_name": target, "list_id": lid, "count": added
                     }
                     st.rerun()
-            with ba3:
-                if st.button(f"⭐ Varsle valgte ({len(selected_rows)})", type="secondary"):
+                if _rb[1].button(f"⭐ {n_sel}", type="secondary", help=f"Varsle på {n_sel} valgte", use_container_width=True):
                     added_wl = 0
                     for row_idx in selected_rows:
                         row_df = df.iloc[row_idx]
                         pname = row_df.get("Produkt")
                         pstore = row_df.get("Butikk", "")
-                        pprice = row_df.get("Pris (kr)", 0.0)
                         if pname and pstore != "OBS 📰" and pname.lower() not in _wl_names:
                             db.add_to_watchlist(_user_db_id, pname, "sale", None)
                             added_wl += 1
@@ -1007,12 +1025,19 @@ def _show_search() -> None:
                         if is_obs and valid_to:
                             from datetime import date as _date
                             obs_st = "⏰ Utløpt" if valid_to < _date.today().isoformat() else f"✅ Gyldig til {valid_to}"
-                        components.html(
+                        st.markdown(
                             _card_html(name, variant, price, unit_price, image_url, url,
                                        mbadge, on_wl, on_list, store, color,
                                        st.session_state.get("last_query", ""), obs_st,
                                        session_token=_session_tok),
-                            height=CARD_HEIGHT,
+                            unsafe_allow_html=True,
+                        )
+                        _produkt_handlinger(
+                            name, price or 0.0, url, variant,
+                            f"{store}_{i}",
+                            wl_names=_wl_names,
+                            already_added=already_added,
+                            is_obs=is_obs,
                         )
 
     # Kassal-resultater er integrert i tabellen og per-butikk-kolonner ovenfor
